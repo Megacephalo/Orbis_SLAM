@@ -25,13 +25,17 @@ OrbisSLAMPipeline::OrbisSLAMPipeline()
 
 void
 OrbisSLAMPipeline::setupParameters() {
+    this->declare_parameter<std::string>("world_frame", "map");
     this->declare_parameter<std::string>("odom_frame", "odom");
     this->declare_parameter<std::string>("robot_baselink_frame", "base_link");
     this->declare_parameter<std::string>("left_camera_frame", "left_camera_frame");
+    this->declare_parameter<bool>("enable_slam", false);
 
+    world_frame_ = this->get_parameter("world_frame").as_string();
     odom_frame_ = this->get_parameter("odom_frame").as_string();
     robot_baselink_frame_ = this->get_parameter("robot_baselink_frame").as_string();
     left_camera_frame_ = this->get_parameter("left_camera_frame").as_string();
+    enable_slam_ = this->get_parameter("enable_slam").as_bool();
 }
 
 void
@@ -103,6 +107,13 @@ OrbisSLAMPipeline::processFrame() {
     // step 3: T_odom_robot = T_odom_left_camera * T_robot_leftCamera.inverse()
     tf2::Transform T_odom_robot = T_odom_leftCamera * T_robot_leftCamera.inverse();
     broadcastTF(T_odom_robot, odom_frame_, robot_baselink_frame_);
+
+    if ( ! enable_slam_ ) {
+        tf2::Transform T_map_odom;
+        T_map_odom.setIdentity();
+        broadcastTF(T_map_odom, world_frame_, odom_frame_);
+        return;
+    }
 
     // TODO: get the T_prev_curr_ and optimize with global bundle adjustment
     // TODO: Publish the optimized pose as TF

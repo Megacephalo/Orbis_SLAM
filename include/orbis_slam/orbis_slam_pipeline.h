@@ -24,6 +24,7 @@ class OrbisSLAMPipeline : public rclcpp::Node {
     Orbis::ZEDWrapper zed_wrapper_;
     rclcpp::TimerBase::SharedPtr timer_;
 
+    std::string world_frame_;
     std::string odom_frame_;
     std::string robot_baselink_frame_;
     std::string left_camera_frame_;
@@ -31,6 +32,7 @@ class OrbisSLAMPipeline : public rclcpp::Node {
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+    bool enable_slam_;
 
   public:
     OrbisSLAMPipeline();
