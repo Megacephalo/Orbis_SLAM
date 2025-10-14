@@ -22,35 +22,7 @@
 using namespace sl;
 using namespace std;
 
-static bool exit_app = false;
-
-// Handle the CTRL-C keyboard signal
-#ifdef _WIN32
-#include <Windows.h>
-void CtrlHandler(DWORD fdwCtrlType) {
-    exit_app = (fdwCtrlType == CTRL_C_EVENT);
-}
-#else
-#include <signal.h>
-void nix_exit_handler(int s) {
-    (void)s;  // Explicitly mark as unused
-    exit_app = true;
-}
-#endif
-
-// Set the function to handle the CTRL-C
-void SetCtrlHandler() {
-#ifdef _WIN32
-    SetConsoleCtrlHandler((PHANDLER_ROUTINE) CtrlHandler, TRUE);
-#else // unix
-    struct sigaction sigIntHandler;
-    sigIntHandler.sa_handler = nix_exit_handler;
-    sigemptyset(&sigIntHandler.sa_mask);
-    sigIntHandler.sa_flags = 0;
-    sigaction(SIGINT, &sigIntHandler, NULL);
-#endif
-}
-
+inline
 void print(string msg_prefix, ERROR_CODE err_code = ERROR_CODE::SUCCESS, string msg_suffix = "") {
     cout << "[Sample]";
     if (err_code != ERROR_CODE::SUCCESS)
@@ -67,6 +39,7 @@ void print(string msg_prefix, ERROR_CODE err_code = ERROR_CODE::SUCCESS, string 
     cout << endl;
 }
 
+inline
 int parseArgs(int argc, char **argv, sl::InitParameters& param) {
     if (argc > 1 && string(argv[1]).find(".svo") != string::npos) {
         // SVO input mode
@@ -121,6 +94,7 @@ int parseArgs(int argc, char **argv, sl::InitParameters& param) {
     return 0;
 }
 
+inline
 cv::Mat toCvMat(sl::Mat& zed_mat) {
     return cv::Mat(zed_mat.getHeight(), zed_mat.getWidth(), (zed_mat.getChannels() == 4) ? CV_8UC4 : CV_8UC3, zed_mat.getPtr<sl::uchar1>(sl::MEM::CPU));
 }
