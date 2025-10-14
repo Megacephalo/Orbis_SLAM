@@ -11,7 +11,5 @@ target_compile_features(${PROJECT_NAME}  PUBLIC
     cxx_std_17
 )
 target_link_libraries(${PROJECT_NAME}
-    ${ZED_LIBS}
-    ${OpenCV_LIBS}
-    ${EIGEN3_LIBS}
+    Orbis_SLAM_pipeline
 )

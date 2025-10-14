@@ -2,27 +2,15 @@
 #include <iostream>
 #include <iomanip>
 
+#include <rclcpp/rclcpp.hpp>
 
-
-#include "orbis_slam/zed_setup_help_utils.h"
-#include "orbis_slam/zed_wrapper.h"
+#include "orbis_slam/orbis_slam_pipeline.h"
 
 int main(int argc, char ** argv) {
-    std::cout << "Launching get_camera_parameters" << std::endl;
+    rclcpp::init(argc, argv);
 
-    Orbis::ZEDWrapper zed_wrapper;
-    bool camera_ready = zed_wrapper.setup(argc, argv);
-    if ( ! camera_ready ) {
-        std::cerr << "Camera setup failed. Exit." << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    while (zed_wrapper.hasNewFrame()) {
-        zed_wrapper.grabFrame();
-
-        cv::imshow("ZED Stream", zed_wrapper.getStereoImage());
-        cv::waitKey(1);
-    }
+    rclcpp::spin(Orbis::OrbisSLAMPipeline::create());
+    rclcpp::shutdown();
 
     return EXIT_SUCCESS;
 }
