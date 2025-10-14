@@ -41,6 +41,7 @@ class ZEDWrapper {
         init_parameters.depth_mode = DEPTH_MODE::NEURAL;
         init_parameters.coordinate_system = COORDINATE_SYSTEM::RIGHT_HANDED_Z_UP_X_FWD; // ROS standards
         init_parameters.coordinate_units = UNIT::METER;
+        init_parameters.sensors_required = true; // enable IMU
         init_parameters.sdk_verbose = 1;
         int res_arg = parseArgs(argc, argv, init_parameters);
         (void)res_arg; // mark as intentionally unused to suppress warning
@@ -65,6 +66,7 @@ class ZEDWrapper {
         // position tracking
         sl::PositionalTrackingParameters positional_tracking_parameters;
         positional_tracking_parameters.mode = POSITIONAL_TRACKING_MODE::GEN_3; // latest tracking mode
+        positional_tracking_parameters.enable_imu_fusion = true; // fuse IMU data
         auto tracking_state = zed_.enablePositionalTracking(positional_tracking_parameters);
         if (tracking_state != ERROR_CODE::SUCCESS) {
             std::cerr << "Position tracking error: " << tracking_state << std::endl;
