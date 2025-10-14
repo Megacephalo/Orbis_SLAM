@@ -145,6 +145,7 @@ class ZEDWrapper {
     double cx_right() const { return calibration_parameters_.right_cam.cx; }
     double cy_right() const { return calibration_parameters_.right_cam.cy; }
     double baseline() const { return calibration_parameters_.stereo_transform.getTranslation()[0]; }
+    bool hasIMU() const { return zed_.getCameraInformation().sensors_configuration.isSensorAvailable(sl::SENSOR_TYPE::GYROSCOPE); }
 };
 
 } /* namespace Orbis */
