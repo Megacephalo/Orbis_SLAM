@@ -24,14 +24,13 @@ class ZEDWrapper {
     sl::Mat frame_point_cloud_;
     sl::Pose T_w_c_;
     sl::Pose T_prev_curr_;
-    bool new_frame_available_ {false};
+    sl::CalibrationParameters calibration_parameters_;
 
   public:
     ZEDWrapper() = default;
     ~ZEDWrapper() {
         frame_point_cloud_.free();
         zed_.disablePositionalTracking();
-        zed_.disableStreaming();
         zed_.close();
     }
 
@@ -40,6 +39,7 @@ class ZEDWrapper {
         InitParameters init_parameters;
         init_parameters.camera_resolution = sl::RESOLUTION::AUTO;
         init_parameters.depth_mode = DEPTH_MODE::NEURAL;
+        init_parameters.coordinate_system = COORDINATE_SYSTEM::RIGHT_HANDED_Z_UP_X_FWD; // ROS standards
         init_parameters.coordinate_units = UNIT::METER;
         init_parameters.sdk_verbose = 1;
         int res_arg = parseArgs(argc, argv, init_parameters);
@@ -52,19 +52,8 @@ class ZEDWrapper {
             return false;
         }
 
-        sl::StreamingParameters stream_params;
-        if (argc == 2 && res_arg == 1) stream_params.port = atoi(argv[1]);
-        if (argc > 2) stream_params.port = atoi(argv[2]);
-
-        returned_state = zed_.enableStreaming(stream_params);
-        if (returned_state != ERROR_CODE::SUCCESS) {
-            print("Streaming initialization error: ", returned_state);
-            return false;
-        }
-
-        print("Streaming on port " + to_string(stream_params.port));
-
-        SetCtrlHandler();
+        // extract the calibration parameters
+        calibration_parameters_ = zed_.getCameraInformation().camera_configuration.calibration_parameters;
 
         // point cloud
         // Automatically set to the optimal resolution
@@ -87,7 +76,7 @@ class ZEDWrapper {
 
     bool hasNewFrame() {
         sl::ERROR_CODE err = zed_.grab();
-        return (err == ERROR_CODE::SUCCESS && ! exit_app);
+        return (err == ERROR_CODE::SUCCESS);
     } /* hasNewFrame() */
 
     void grabFrame() {
@@ -140,6 +129,20 @@ class ZEDWrapper {
     cv::Mat getLeftImage() { return toCvMat(frame_left_image_); }
     cv::Mat getRightImage() { return toCvMat(frame_right_image_); }
     cv::Mat getStereoImage() { return toCvMat(stereo_image_); }
+
+    int getCameraFPS() const {
+        return static_cast<int>(zed_.getCameraInformation().camera_configuration.fps);
+    }
+
+    double fx_left() const { return calibration_parameters_.left_cam.fx; }
+    double fy_left() const { return calibration_parameters_.left_cam.fy; }
+    double cx_left() const { return calibration_parameters_.left_cam.cx; }
+    double cy_left() const { return calibration_parameters_.left_cam.cy; }
+    double fx_right() const { return calibration_parameters_.right_cam.fx; }
+    double fy_right() const { return calibration_parameters_.right_cam.fy; }
+    double cx_right() const { return calibration_parameters_.right_cam.cx; }
+    double cy_right() const { return calibration_parameters_.right_cam.cy; }
+    double baseline() const { return calibration_parameters_.stereo_transform.getTranslation()[0]; }
 };
 
 } /* namespace Orbis */
