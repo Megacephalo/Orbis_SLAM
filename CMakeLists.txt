@@ -40,18 +40,19 @@ link_directories(${OpenCV_LIBRARY_DIRS})
 link_directories(${EIGEN3_LIBRARY_DIRS})
 link_directories(${Open3D_LIBRARY_DIRS})
 
+# Check if static libraries exist, otherwise use shared
+if(EXISTS "${ZED_STATIC_LIBRARIES}")
+    set(LINK_SHARED_ZED OFF)
+else()
+    set(LINK_SHARED_ZED ON)
+    message(WARNING "ZED static libraries not found, using shared libraries instead")
+endif()
+
 if (LINK_SHARED_ZED)
     SET(ZED_LIBS ${ZED_LIBRARIES} ${CUDA_CUDA_LIBRARY} ${CUDA_CUDART_LIBRARY})
 else()
     SET(ZED_LIBS ${ZED_STATIC_LIBRARIES} ${CUDA_CUDA_LIBRARY} ${CUDA_LIBRARY})
 endif()
-
-set(VIEWER_LIBS
-    ${GLEW_LIBRARIES}
-    ${GLUT_LIBRARY}
-    ${OPENGL_gl_LIBRARY}
-    ${OPENGL_glu_LIBRARY}
-)
 
 add_subdirectory(src)
 add_subdirectory(app)
