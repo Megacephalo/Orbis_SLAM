@@ -1,5 +1,7 @@
 add_library(Orbis_SLAM_pipeline
     orbis_slam_pipeline.cpp
+    pose_optimizer.cpp
+    keyframe_selector.cpp
 )
 target_include_directories(Orbis_SLAM_pipeline PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -22,4 +24,11 @@ target_link_libraries(Orbis_SLAM_pipeline
     ${ZED_LIBS}
     ${OpenCV_LIBS}
     ${EIGEN3_LIBS}
+    Sophus::Sophus
+    fmt::fmt
+    g2o::core
+    g2o::types_slam3d
+    g2o::solver_eigen
+    g2o::stuff
+    TBB::tbb
 )

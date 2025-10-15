@@ -19,6 +19,8 @@
 #include <sl/Camera.hpp>
 #pragma GCC diagnostic pop
 
+#include <sophus/se3.hpp>
+
 using namespace sl;
 using namespace std;
 
@@ -97,6 +99,17 @@ int parseArgs(int argc, char **argv, sl::InitParameters& param) {
 inline
 cv::Mat toCvMat(sl::Mat& zed_mat) {
     return cv::Mat(zed_mat.getHeight(), zed_mat.getWidth(), (zed_mat.getChannels() == 4) ? CV_8UC4 : CV_8UC3, zed_mat.getPtr<sl::uchar1>(sl::MEM::CPU));
+}
+
+inline
+Sophus::SE3d toSophus(const sl::Pose& zed_pose) {
+    sl::Translation translation = zed_pose.getTranslation();
+    sl::Orientation orientation = zed_pose.getOrientation();
+    Eigen::Vector3d t(translation.x, translation.y, translation.z);
+    Eigen::Quaterniond q(orientation.w, orientation.x, orientation.y, orientation.z);
+    q.normalize();
+    
+    return Sophus::SE3d(q, t);
 }
 
 #endif /* _HELP_UTILS_H_ */

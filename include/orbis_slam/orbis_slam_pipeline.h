@@ -16,12 +16,17 @@
 
 #include "orbis_slam/zed_setup_help_utils.h"
 #include "orbis_slam/zed_wrapper.h"
+#include "orbis_slam/essential_data_structure.h"
+#include "orbis_slam/keyframe_selector.h"
+#include "orbis_slam/pose_optimizer.h"
 
 namespace Orbis {
 
 class OrbisSLAMPipeline : public rclcpp::Node {
   private:
     Orbis::ZEDWrapper zed_wrapper_;
+    Orbis::KeyFrameSelector keyframe_selector_;
+    Orbis::PoseOptimizer pose_optimizer_;
     rclcpp::TimerBase::SharedPtr timer_;
 
     std::string world_frame_;
@@ -33,6 +38,9 @@ class OrbisSLAMPipeline : public rclcpp::Node {
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
     bool enable_slam_;
+    uint64_t curr_frame_id_;
+    Frame::Ptr last_keyframe_;
+    Trajectory::Ptr trajectory_;
 
   public:
     OrbisSLAMPipeline();
@@ -47,7 +55,7 @@ class OrbisSLAMPipeline : public rclcpp::Node {
   
   private:
     void setupParameters();
-    void broadcastTF(const tf2::Transform& transf, const std::string& parent_frame, const std::string& child_frame);
+    void broadcastTF(const tf2::Transform& transf, const std::string& parent_frame, const std::string& child_frame, const rclcpp::Time& timestamp);
 }; /* class OrbisSLAMPipeline */
 
 } /* namespace Orbis */

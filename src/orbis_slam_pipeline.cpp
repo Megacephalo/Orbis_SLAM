@@ -3,7 +3,10 @@
 namespace Orbis {
 
 OrbisSLAMPipeline::OrbisSLAMPipeline()
-: Node("orbis_slam_pipeline_node") {
+: Node("orbis_slam_pipeline_node")
+, curr_frame_id_(0)
+, last_keyframe_(nullptr)
+{
     bool camera_ready = zed_wrapper_.setup();
     if ( ! camera_ready ) {
         throw std::runtime_error("Camera setup failed. Exit.");
@@ -16,12 +19,15 @@ OrbisSLAMPipeline::OrbisSLAMPipeline()
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
+    trajectory_ = Trajectory::create();
+    pose_optimizer_.setTrajectory(trajectory_);
+
     // create a timer to process frame at the requested frequency
     timer_ = this->create_wall_timer(
         std::chrono::milliseconds(1000 / zed_wrapper_.getCameraFPS()),
         std::bind(&OrbisSLAMPipeline::processFrame, this)
     );
-}
+} /* ctor */
 
 void
 OrbisSLAMPipeline::setupParameters() {
@@ -105,26 +111,78 @@ OrbisSLAMPipeline::processFrame() {
     ));
 
     // step 3: T_odom_robot = T_odom_left_camera * T_robot_leftCamera.inverse()
+    rclcpp::Time current_time = this->get_clock()->now();
+
     tf2::Transform T_odom_robot = T_odom_leftCamera * T_robot_leftCamera.inverse();
-    broadcastTF(T_odom_robot, odom_frame_, robot_baselink_frame_);
+    broadcastTF(T_odom_robot, odom_frame_, robot_baselink_frame_, current_time);
+
+    
 
     if ( ! enable_slam_ ) {
         tf2::Transform T_map_odom;
         T_map_odom.setIdentity();
-        broadcastTF(T_map_odom, world_frame_, odom_frame_);
+        broadcastTF(T_map_odom, world_frame_, odom_frame_, current_time);
         return;
     }
 
-    // TODO: get the T_prev_curr_ and optimize with global bundle adjustment
-    // TODO: Publish the optimized pose as TF
+    // TODO: get the T_prev_curr_ and optimize in terms of pose-graph
+    Frame::Ptr curr_frame = Frame::create(curr_frame_id_++, toSophus(T_w_c), false, current_time.seconds());
+
+    keyframe_selector_.processFrame(curr_frame);
+
+    if (! curr_frame->isKeyFrame() ) return;
+
+    trajectory_->pushBack(curr_frame);
+
+    if (trajectory_->size() == 1) {
+        last_keyframe_ = curr_frame;
+        pose_optimizer_.addPoseVertex( curr_frame, true ); // fix the first keyframe at the origin
+        return;
+    }
+    
+    pose_optimizer_.addPoseVertex( curr_frame, false);
+
+    // // add the relative motion edge
+    Eigen::Matrix<double, 6, 6> information = PoseOptimizer::createInformationMatrix(T_w_c);
+    pose_optimizer_.addRelativeMotionEdgeFromPoses(last_keyframe_, curr_frame, information);
+
+    if (pose_optimizer_.shouldOptimize(current_time.seconds())) {
+        pose_optimizer_.requestOptimization(current_time.seconds());
+    }
+
+    curr_frame->pose = pose_optimizer_.getPose(curr_frame->id);
+
+
+
+    // Publish the optimized pose as TF
+    tf2::Transform T_map_cam;
+    auto optimized_translation = curr_frame->pose.translation();
+    T_map_cam.setOrigin( tf2::Vector3(
+        optimized_translation.x(),
+        optimized_translation.y(),
+        optimized_translation.z()
+    ));
+    Eigen::Quaterniond q = curr_frame->pose.unit_quaternion();
+    T_map_cam.setRotation( tf2::Quaternion(
+        q.x(),
+        q.y(),
+        q.z(),
+        q.w()
+    ));
+    tf2::Transform T_map_odom = T_map_cam * T_odom_robot.inverse();
+    broadcastTF(T_map_odom, world_frame_, odom_frame_, this->get_clock()->now());
+
     // TODO: Publish the global map as point cloud message
     // TODO: Publish the left and right images as ROS2 image messages
+
+    last_keyframe_ = curr_frame;
 } /* processFrame */
 
 void
-OrbisSLAMPipeline::broadcastTF(const tf2::Transform& transf, const std::string& parent_frame, const std::string& child_frame) {
+OrbisSLAMPipeline::broadcastTF(const tf2::Transform& transf, const std::string& parent_frame, const std::string& child_frame, const rclcpp::Time& timestamp) {
     geometry_msgs::msg::TransformStamped tf_msg;
-    tf_msg.header.stamp = this->get_clock()->now();
+    // tf_msg.header.stamp = this->get_clock()->now();
+    tf_msg.header.stamp = timestamp;
     tf_msg.header.frame_id = parent_frame;
     tf_msg.child_frame_id = child_frame;
     tf_msg.transform.translation.x = transf.getOrigin().x();

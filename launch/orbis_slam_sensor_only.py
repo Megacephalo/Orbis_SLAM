@@ -32,7 +32,8 @@ def generate_launch_description():
         parameters=[{
             'odom_frame'            : 'odom',
             'robot_baselink_frame'  : 'zed2i_camera_link',
-            'left_camera_frame'     : 'zed2i_left_camera_optical_frame'
+            'left_camera_frame'     : 'zed2i_left_camera_optical_frame',
+            'enable_slam'           : True,
         }]
     )
     

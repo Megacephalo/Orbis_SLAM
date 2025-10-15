@@ -8,9 +8,6 @@
 
 #include <sl/Camera.hpp>
 
-#include <opencv2/opencv.hpp>
-
-
 #include "orbis_slam/zed_setup_help_utils.h"
 
 namespace Orbis {
