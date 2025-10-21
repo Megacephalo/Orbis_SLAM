@@ -1,10 +1,16 @@
 #include <cstdio>
+#include <iostream>
+#include <iomanip>
 
-int main(int argc, char ** argv)
-{
-  (void) argc;
-  (void) argv;
+#include <rclcpp/rclcpp.hpp>
 
-  printf("hello world orbis_slam package\n");
-  return 0;
+#include "orbis_slam/orbis_slam_pipeline.h"
+
+int main(int argc, char ** argv) {
+    rclcpp::init(argc, argv);
+
+    rclcpp::spin(Orbis::OrbisSLAMPipeline::create());
+    rclcpp::shutdown();
+
+    return EXIT_SUCCESS;
 }

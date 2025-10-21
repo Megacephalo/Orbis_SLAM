@@ -19,13 +19,18 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(image_transport REQUIRED)
+find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Sophus REQUIRED)
 find_package(Open3D REQUIRED)
 find_package(ZED REQUIRED)
 find_package(CUDA ${ZED_CUDA_VERSION} REQUIRED)
+find_package(fmt REQUIRED)
+find_package(g2o REQUIRED)
+find_package(TBB REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(${EIGEN3_INCLUDE_DIR})
@@ -40,24 +45,28 @@ link_directories(${OpenCV_LIBRARY_DIRS})
 link_directories(${EIGEN3_LIBRARY_DIRS})
 link_directories(${Open3D_LIBRARY_DIRS})
 
+# Check if static libraries exist, otherwise use shared
+if(EXISTS "${ZED_STATIC_LIBRARIES}")
+    set(LINK_SHARED_ZED OFF)
+else()
+    set(LINK_SHARED_ZED ON)
+    message(WARNING "ZED static libraries not found, using shared libraries instead")
+endif()
+
 if (LINK_SHARED_ZED)
     SET(ZED_LIBS ${ZED_LIBRARIES} ${CUDA_CUDA_LIBRARY} ${CUDA_CUDART_LIBRARY})
 else()
     SET(ZED_LIBS ${ZED_STATIC_LIBRARIES} ${CUDA_CUDA_LIBRARY} ${CUDA_LIBRARY})
 endif()
 
-set(VIEWER_LIBS
-    ${GLEW_LIBRARIES}
-    ${GLUT_LIBRARY}
-    ${OPENGL_gl_LIBRARY}
-    ${OPENGL_glu_LIBRARY}
-)
-
 add_subdirectory(src)
 add_subdirectory(app)
 
 install(TARGETS ${PROJECT_NAME}
   DESTINATION lib/${PROJECT_NAME}
+)
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)

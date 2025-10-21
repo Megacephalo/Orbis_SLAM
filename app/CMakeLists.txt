@@ -1,4 +1,4 @@
-add_executable(${PROJECT_NAME} 
+add_executable(${PROJECT_NAME}
     orbis_slam_main.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
@@ -9,4 +9,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_compile_features(${PROJECT_NAME}  PUBLIC 
     c_std_99 
     cxx_std_17
+)
+target_link_libraries(${PROJECT_NAME}
+    Orbis_SLAM_pipeline
 )
