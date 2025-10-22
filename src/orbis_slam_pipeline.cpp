@@ -148,7 +148,13 @@ OrbisSLAMPipeline::processFrame() {
     tf2::Transform T_odom_robot = T_odom_leftCamera * T_robot_leftCamera.inverse();
     broadcastTF(T_odom_robot, odom_frame_, robot_baselink_frame_, current_time);
 
-    
+    // Publish images and point cloud
+    left_image_pub_->publish(*convertCvMatToRosImage(zed_wrapper_.getLeftImage(), left_camera_frame_, current_time));
+    stereo_image_pub_->publish(*convertCvMatToRosImage(zed_wrapper_.getStereoImage(), cam_center_frame_, current_time));  
+
+    //// // See https://github.com/stereolabs/zed-sdk/blob/e9ab2621552a2e0a2ea37a0352133c45e8162f7b/tutorials/tutorial%203%20-%20depth%20sensing/cpp/main.cpp#L57
+    auto ros2_cloud = convertZEDToPointCloud2(zed_wrapper_.sl_getPointCloud(), left_camera_frame_, current_time);
+    camera_pointcloud_pub_->publish(ros2_cloud);
 
     if ( ! enable_slam_ ) {
         tf2::Transform T_map_odom;
