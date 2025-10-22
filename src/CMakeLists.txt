@@ -10,6 +10,7 @@ target_include_directories(Orbis_SLAM_pipeline PUBLIC
 ament_target_dependencies(Orbis_SLAM_pipeline
     rclcpp
     sensor_msgs
+    cv_bridge
     tf2
     tf2_ros
     tf2_geometry_msgs
