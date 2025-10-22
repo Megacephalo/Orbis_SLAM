@@ -122,6 +122,7 @@ class ZEDWrapper {
     cv::Mat getLeftImage() { return toCvMat(frame_left_image_); }
     cv::Mat getRightImage() { return toCvMat(frame_right_image_); }
     cv::Mat getStereoImage() { return toCvMat(stereo_image_); }
+    sl::Resolution getResolution() const { return frame_point_cloud_.getResolution(); }
 
     int getCameraFPS() const {
         return static_cast<int>(zed_.getCameraInformation().camera_configuration.fps);
