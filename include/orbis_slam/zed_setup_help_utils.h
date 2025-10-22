@@ -24,6 +24,8 @@
 using namespace sl;
 using namespace std;
 
+namespace Orbis {
+
 inline
 void print(string msg_prefix, ERROR_CODE err_code = ERROR_CODE::SUCCESS, string msg_suffix = "") {
     cout << "[Sample]";
@@ -97,7 +99,7 @@ int parseArgs(int argc, char **argv, sl::InitParameters& param) {
 }
 
 inline
-cv::Mat toCvMat(sl::Mat& zed_mat) {
+cv::Mat toCvMat(const sl::Mat& zed_mat) {
     return cv::Mat(zed_mat.getHeight(), zed_mat.getWidth(), (zed_mat.getChannels() == 4) ? CV_8UC4 : CV_8UC3, zed_mat.getPtr<sl::uchar1>(sl::MEM::CPU));
 }
 
@@ -111,5 +113,7 @@ Sophus::SE3d toSophus(const sl::Pose& zed_pose) {
     
     return Sophus::SE3d(q, t);
 }
+
+} /* namespace Orbis */
 
 #endif /* _HELP_UTILS_H_ */
