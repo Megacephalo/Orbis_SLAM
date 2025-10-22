@@ -13,6 +13,12 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
+
+#include <sensor_msgs/msg/image.hpp>
+#include <cv_bridge/cv_bridge.h>
+#include <opencv2/opencv.hpp> 
 
 #include "orbis_slam/zed_setup_help_utils.h"
 #include "orbis_slam/zed_wrapper.h"
@@ -33,10 +39,17 @@ class OrbisSLAMPipeline : public rclcpp::Node {
     std::string odom_frame_;
     std::string robot_baselink_frame_;
     std::string left_camera_frame_;
+    std::string cam_center_frame_;
+    std::string cam_pc_topic_name_;
+    std::string left_image_topic_name_;
+    std::string stereo_image_topic_name_;
 
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr camera_pointcloud_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr left_image_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr stereo_image_pub_;
     bool enable_slam_;
     uint64_t curr_frame_id_;
     Frame::Ptr last_keyframe_;

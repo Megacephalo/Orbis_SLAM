@@ -18,6 +18,9 @@ OrbisSLAMPipeline::OrbisSLAMPipeline()
     tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    camera_pointcloud_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(cam_pc_topic_name_, 10);
+    left_image_pub_ = this->create_publisher<sensor_msgs::msg::Image>(left_image_topic_name_, 10);
+    stereo_image_pub_ = this->create_publisher<sensor_msgs::msg::Image>(stereo_image_topic_name_, 10);
 
     trajectory_ = Trajectory::create();
     pose_optimizer_.setTrajectory(trajectory_);
@@ -36,12 +39,31 @@ OrbisSLAMPipeline::setupParameters() {
     this->declare_parameter<std::string>("robot_baselink_frame", "base_link");
     this->declare_parameter<std::string>("left_camera_frame", "left_camera_frame");
     this->declare_parameter<bool>("enable_slam", false);
+    this->declare_parameter<std::string>("cam_center_frame", "camera_center");
+    this->declare_parameter<std::string>("cam_pointcloud_topic", "zed/point_cloud");
+    this->declare_parameter<std::string>("left_image_topic", "zed/left_image");
+    this->declare_parameter<std::string>("stereo_image_topic", "zed/stereo_image");
 
     world_frame_ = this->get_parameter("world_frame").as_string();
     odom_frame_ = this->get_parameter("odom_frame").as_string();
     robot_baselink_frame_ = this->get_parameter("robot_baselink_frame").as_string();
     left_camera_frame_ = this->get_parameter("left_camera_frame").as_string();
     enable_slam_ = this->get_parameter("enable_slam").as_bool();
+    cam_center_frame_ = this->get_parameter("cam_center_frame").as_string();
+    cam_pc_topic_name_ = this->get_parameter("cam_pointcloud_topic").as_string();
+    left_image_topic_name_ = this->get_parameter("left_image_topic").as_string();
+    stereo_image_topic_name_ = this->get_parameter("stereo_image_topic").as_string();
+
+    RCLCPP_INFO(this->get_logger(), "Parameters set:");
+    RCLCPP_INFO(this->get_logger(), "    world_frame:           %s", world_frame_.c_str());
+    RCLCPP_INFO(this->get_logger(), "    odom_frame:            %s", odom_frame_.c_str());
+    RCLCPP_INFO(this->get_logger(), "    robot_baselink_frame:  %s", robot_baselink_frame_.c_str());
+    RCLCPP_INFO(this->get_logger(), "    left_camera_frame:     %s", left_camera_frame_.c_str());
+    RCLCPP_INFO(this->get_logger(), "    cam_center_frame:      %s", cam_center_frame_.c_str());
+    RCLCPP_INFO(this->get_logger(), "    cam_pointcloud_topic:  %s", cam_pc_topic_name_.c_str());
+    RCLCPP_INFO(this->get_logger(), "    enable_slam:           %s", enable_slam_ ? "true" : "false");
+    RCLCPP_INFO(this->get_logger(), "    left_image_topic:      %s", left_image_topic_name_.c_str());
+    RCLCPP_INFO(this->get_logger(), "    stereo_image_topic:    %s", stereo_image_topic_name_.c_str());
 }
 
 void
