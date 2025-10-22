@@ -210,9 +210,6 @@ OrbisSLAMPipeline::processFrame() {
     tf2::Transform T_map_odom = T_map_cam * T_odom_robot.inverse();
     broadcastTF(T_map_odom, world_frame_, odom_frame_, this->get_clock()->now());
 
-    // TODO: Publish the global map as point cloud message
-    // TODO: Publish the left and right images as ROS2 image messages
-
     last_keyframe_ = curr_frame;
 } /* processFrame */
 
