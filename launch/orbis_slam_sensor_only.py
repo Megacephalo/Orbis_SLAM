@@ -26,14 +26,17 @@ def generate_launch_description():
     # Define the ORB-SLAM3 node
     orbis_slam_node = Node(
         package='orbis_slam',
-        executable='orbis_slam',
+        executable='orbis_slam_node',
         name='orbis_slam_node',
         output='screen',
         parameters=[{
+            'world_frame'           : 'map',
             'odom_frame'            : 'odom',
             'robot_baselink_frame'  : 'zed2i_camera_link',
+            'cam_center_frame'      : 'zed_2i_camera_center',
             'left_camera_frame'     : 'zed2i_left_camera_optical_frame',
             'enable_slam'           : True,
+            'cam_pointcloud_topic'  : 'zed/point_cloud'
         }]
     )
     
