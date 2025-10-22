@@ -113,12 +113,22 @@ OrbisSLAMPipeline::processFrame() {
 
     // step 2: T_robot_leftCamera
     geometry_msgs::msg::TransformStamped T_robot_leftCamera_msg;
-    T_robot_leftCamera_msg = tf_buffer_->lookupTransform(
-        robot_baselink_frame_,  // target frame
-        left_camera_frame_,    // source frame
-        tf2::TimePointZero,      // get the latest available
-        tf2::durationFromSec(1.0)   // wait for 1 second
-    );
+    try {
+        T_robot_leftCamera_msg = tf_buffer_->lookupTransform(
+            robot_baselink_frame_,  // target frame
+            left_camera_frame_,    // source frame
+            tf2::TimePointZero,      // get the latest available
+            tf2::durationFromSec(1.0)   // wait for 1 second
+        );
+    }
+    catch(const tf2::TransformException& ex) {
+        RCLCPP_WARN(this->get_logger(), "Could not get transform from %s to %s: %s",
+            robot_baselink_frame_.c_str(),
+            left_camera_frame_.c_str(),
+            ex.what());
+        return; // skip this frame and try again on the next one
+    }
+    
     tf2::Transform T_robot_leftCamera;
     T_robot_leftCamera.setOrigin(tf2::Vector3(
         T_robot_leftCamera_msg.transform.translation.x,
