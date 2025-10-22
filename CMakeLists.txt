@@ -62,7 +62,7 @@ endif()
 add_subdirectory(src)
 add_subdirectory(app)
 
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS ${PROJECT_NAME}_node
   DESTINATION lib/${PROJECT_NAME}
 )
 install(DIRECTORY launch
