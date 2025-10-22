@@ -218,4 +218,112 @@ OrbisSLAMPipeline::broadcastTF(const tf2::Transform& transf, const std::string& 
     tf_broadcaster_->sendTransform(tf_msg);
 }
 
+sensor_msgs::msg::PointCloud2
+convertZEDToPointCloud2(const sl::Mat& zed_cloud, const std::string& frame_id, const rclcpp::Time& timestamp) {    
+    sensor_msgs::msg::PointCloud2 cloud_msg;
+
+    // Set header
+    cloud_msg.header.frame_id = frame_id;
+    cloud_msg.header.stamp = timestamp;
+
+    // Get cloud dimensions
+    int width = zed_cloud.getWidth();
+    int height = zed_cloud.getHeight();
+    
+    cloud_msg.width = width;
+    cloud_msg.height = height;
+    cloud_msg.is_dense = false;  // May contain NaN values
+    
+    // Define fields: X, Y, Z, RGBA
+    sensor_msgs::PointCloud2Modifier modifier(cloud_msg);
+    modifier.setPointCloud2FieldsByString(2, "xyz", "rgba");
+
+    // create iterators
+    sensor_msgs::PointCloud2Iterator<float> iter_x(cloud_msg, "x");
+    sensor_msgs::PointCloud2Iterator<float> iter_y(cloud_msg, "y");
+    sensor_msgs::PointCloud2Iterator<float> iter_z(cloud_msg, "z");
+    sensor_msgs::PointCloud2Iterator<uint8_t> iter_r(cloud_msg, "r");
+    sensor_msgs::PointCloud2Iterator<uint8_t> iter_g(cloud_msg, "g");
+    sensor_msgs::PointCloud2Iterator<uint8_t> iter_b(cloud_msg, "b");
+    sensor_msgs::PointCloud2Iterator<uint8_t> iter_a(cloud_msg, "a");
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            sl::float4 point3D;
+            zed_cloud.getValue(x, y, &point3D);
+
+            // Set coordinates (use NaN for invalid points instead of skipping)
+            if (std::isfinite(point3D.x) && std::isfinite(point3D.y) && std::isfinite(point3D.z) && 
+                point3D.x != 0.0f && point3D.y != 0.0f && point3D.z != 0.0f) {
+                *iter_x = point3D.x;
+                *iter_y = point3D.y;
+                *iter_z = point3D.z;
+
+                // Correct ARGB unpacking (ZED uses ARGB format)
+                uint32_t argb = *reinterpret_cast<uint32_t*>(&point3D.w);
+                *iter_a = (argb >> 24) & 0xFF;  // A
+                *iter_r = (argb >> 16) & 0xFF;  // R
+                *iter_g = (argb >> 8) & 0xFF;   // G
+                *iter_b = argb & 0xFF;          // B
+
+            } else {
+                // Set invalid points to NaN
+                *iter_x = std::numeric_limits<float>::quiet_NaN();
+                *iter_y = std::numeric_limits<float>::quiet_NaN();
+                *iter_z = std::numeric_limits<float>::quiet_NaN();
+                *iter_r = 0;
+                *iter_g = 0;
+                *iter_b = 0;
+                *iter_a = 0;
+            }
+
+            // Fixed: semicolon instead of comma
+            ++iter_x; ++iter_y; ++iter_z;
+            ++iter_r; ++iter_g; ++iter_b; ++iter_a;
+        }
+    }
+
+    return cloud_msg;
+}
+
+sensor_msgs::msg::Image::SharedPtr
+convertCvMatToRosImage(const cv::Mat& image, const std::string& frame_id, const rclcpp::Time& timestamp) {
+    if (image.empty()) {
+        throw std::runtime_error("Input cv::Mat image is empty.");
+    }
+
+    cv_bridge::CvImage cv_image;
+    cv_image.header.stamp = timestamp;
+    cv_image.header.frame_id = frame_id;
+
+    // Determine encoding based on image properties
+    std::string encoding;
+    if (image.channels() == 1) {
+        encoding = "mono8";
+    } else if (image.channels() == 3) {
+        encoding = "bgr8";
+    } else if (image.channels() == 4) {
+        encoding = "bgra8";
+    } else {
+        throw std::runtime_error("Unsupported number of channels: " + std::to_string(image.channels()));
+    }
+    cv_image.encoding = encoding;
+
+    // Ensure the image is in the correct format
+    cv::Mat processed_image;
+    if (image.type() == CV_8UC3) {
+        processed_image = image;
+    } else if (image.type() == CV_8UC1) {
+        processed_image = image;
+    } else if (image.type() == CV_8UC4) {
+        processed_image = image;
+    } else {
+        // Convert to 8-bit if needed
+        image.convertTo(processed_image, CV_8UC3);
+    }
+    cv_image.image = processed_image;
+
+    return cv_image.toImageMsg();
+}
+
 } /* namespace Orbis */

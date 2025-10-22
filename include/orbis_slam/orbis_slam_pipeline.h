@@ -71,5 +71,11 @@ class OrbisSLAMPipeline : public rclcpp::Node {
     void broadcastTF(const tf2::Transform& transf, const std::string& parent_frame, const std::string& child_frame, const rclcpp::Time& timestamp);
 }; /* class OrbisSLAMPipeline */
 
+sensor_msgs::msg::PointCloud2
+convertZEDToPointCloud2(const sl::Mat& zed_cloud, const std::string& frame_id, const rclcpp::Time& timestamp);
+
+sensor_msgs::msg::Image::SharedPtr
+convertCvMatToRosImage(const cv::Mat& image, const std::string& frame_id, const rclcpp::Time& timestamp);
+
 } /* namespace Orbis */
 #endif /* _ORBIS_SLAM_PIPELINE_H_ */
