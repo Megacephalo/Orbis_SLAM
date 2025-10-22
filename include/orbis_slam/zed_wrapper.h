@@ -36,7 +36,8 @@ class ZEDWrapper {
         InitParameters init_parameters;
         init_parameters.camera_resolution = sl::RESOLUTION::AUTO;
         init_parameters.depth_mode = DEPTH_MODE::NEURAL;
-        init_parameters.coordinate_system = COORDINATE_SYSTEM::RIGHT_HANDED_Z_UP_X_FWD; // ROS standards
+        // init_parameters.coordinate_system = COORDINATE_SYSTEM::RIGHT_HANDED_Z_UP_X_FWD; // ROS standards
+        init_parameters.coordinate_system = COORDINATE_SYSTEM::IMAGE; // ZED default
         init_parameters.coordinate_units = UNIT::METER;
         init_parameters.sensors_required = true; // enable IMU
         init_parameters.sdk_verbose = 1;
@@ -52,13 +53,6 @@ class ZEDWrapper {
 
         // extract the calibration parameters
         calibration_parameters_ = zed_.getCameraInformation().camera_configuration.calibration_parameters;
-
-        // point cloud
-        // Automatically set to the optimal resolution
-        sl::Resolution res(-1, -1); 
-        
-        zed_.retrieveMeasure(frame_point_cloud_, MEASURE::XYZRGBA, MEM::GPU, res);
-        res = frame_point_cloud_.getResolution();
 
         // position tracking
         sl::PositionalTrackingParameters positional_tracking_parameters;
@@ -82,7 +76,7 @@ class ZEDWrapper {
         zed_.retrieveImage(frame_left_image_, VIEW::LEFT);
         zed_.retrieveImage(frame_right_image_, VIEW::RIGHT);
         zed_.retrieveImage(stereo_image_, VIEW::SIDE_BY_SIDE);
-        zed_.retrieveMeasure(frame_point_cloud_, MEASURE::XYZRGBA, MEM::GPU);
+        zed_.retrieveMeasure(frame_point_cloud_, MEASURE::XYZRGBA, MEM::CPU); // retrieve to CPU for memory access on ROS2
         zed_.getPosition(T_w_c_, REFERENCE_FRAME::WORLD);
         zed_.getPosition(T_prev_curr_, REFERENCE_FRAME::CAMERA);
     } /* grabFrame() */
