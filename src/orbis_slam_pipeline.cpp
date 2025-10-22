@@ -3,7 +3,7 @@
 namespace Orbis {
 
 OrbisSLAMPipeline::OrbisSLAMPipeline()
-: Node("orbis_slam_pipeline_node")
+: Node("orbis_slam_node")
 , curr_frame_id_(0)
 , last_keyframe_(nullptr)
 {
