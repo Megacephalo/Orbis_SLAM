@@ -1,15 +1,65 @@
-add_executable(${PROJECT_NAME}
+# Enable automatic MOC, UIC, and RCC
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+find_package(Qt6 COMPONENTS Core Gui OpenGL Widgets OpenGLWidgets REQUIRED)
+find_package(OpenGL REQUIRED)
+
+find_package(glm REQUIRED)
+
+# Set OpenGL preference policy
+set(OpenGL_GL_PREFERENCE GLVND)
+cmake_policy(SET CMP0072 NEW)
+
+add_executable(${PROJECT_NAME}_node
     orbis_slam_main.cpp
 )
-target_include_directories(${PROJECT_NAME} PUBLIC
+target_include_directories(${PROJECT_NAME}_node PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 # Require C99 and C++17
-target_compile_features(${PROJECT_NAME}  PUBLIC 
+target_compile_features(${PROJECT_NAME}_node  PUBLIC 
     c_std_99 
     cxx_std_17
 )
-target_link_libraries(${PROJECT_NAME}
+target_link_libraries(${PROJECT_NAME}_node
     Orbis_SLAM_pipeline
+)
+
+
+set(VISUALIZER_LIBS
+    Qt6::Core
+    Qt6::Gui
+    Qt6::OpenGL
+    OpenGL::GL
+    glm::glm
+    Qt6::Widgets
+    Qt6::OpenGLWidgets
+)
+
+add_executable(ZEDRecPlay 
+    ZEDRecPlay.cpp
+)
+target_include_directories(ZEDRecPlay PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+# Require C99 and C++17
+target_compile_features(ZEDRecPlay PUBLIC 
+    c_std_99 
+    cxx_std_17
+)
+target_link_libraries(ZEDRecPlay
+    Orbis_SLAM_pipeline
+    ${VISUALIZER_LIBS}
+)
+
+
+install(TARGETS 
+  ${PROJECT_NAME}_node 
+  ZEDRecPlay
+  DESTINATION lib/${PROJECT_NAME}
 )
