@@ -7,18 +7,18 @@ static bool exit_app = false;
 #ifdef _WIN32
     #include <Windows.h>
 
-void CtrlHandler(DWORD fdwCtrlType) {
+inline void CtrlHandler(DWORD fdwCtrlType) {
     exit_app = (fdwCtrlType == CTRL_C_EVENT);
 }
 #else
     #include <signal.h>
-void nix_exit_handler(int s) {
+inline void nix_exit_handler(int s) {
     exit_app = true;
 }
 #endif
 
 // Set the function to handle the CTRL-C
-void SetCtrlHandler() {
+inline void SetCtrlHandler() {
 #ifdef _WIN32
     SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
 #else // unix

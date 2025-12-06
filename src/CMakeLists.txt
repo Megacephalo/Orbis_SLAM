@@ -51,7 +51,8 @@ target_link_libraries(Orbis_SLAM_pipeline
     g2o::stuff
     TBB::tbb
     Qt6::Core
-    # protobuf::libprotobuf  # Link protobuf library
+    ZED_custom_frame_protobuf_lib
+    protobuf::libprotobuf
 )
 
 # Install the shared library

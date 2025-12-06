@@ -12,6 +12,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "orbis_slam/zed_wrapper.h"
+#include "orbis_slam/recorder_and_player/zed_recorder.h"
 
 namespace Orbis {
 
@@ -73,6 +74,13 @@ signals:
      */
     void stopped();
 
+    /**
+     * @brief Emitted when recording finishes and is ready to be saved
+     * @param hasData True if there is recorded data to save
+     * @param frameCount Number of frames recorded
+     */
+    void recordingReadyToSave(bool hasData, int frameCount);
+
 public slots:
     /**
      * @brief Initialize the ZED camera
@@ -96,6 +104,17 @@ public slots:
     void stopRecording();
 
     /**
+     * @brief Save the recorded data to a file
+     * @param filepath Path where the recording should be saved
+     */
+    void saveRecording(const QString& filepath);
+
+    /**
+     * @brief Discard the recorded data without saving
+     */
+    void discardRecording();
+
+    /**
      * @brief Stop current operation completely
      */
     void stop();
@@ -104,10 +123,15 @@ private:
     void captureLoop();
 
     std::unique_ptr<ZEDWrapper> zedWrapper_;
+    std::unique_ptr<ZED_Recorder> zedRecorder_;
     std::atomic<WorkerMode> mode_;
     std::atomic<bool> shouldStop_;
     std::atomic<bool> cameraReady_;
     int frameCounter_;
+    int recordedFrameCount_;
+    std::chrono::steady_clock::time_point recordingStartTime_;
+    int maxRecordingDurationSeconds_;
+    QString pendingRecordingFilepath_;
 };
 
 } // namespace Orbis

@@ -40,21 +40,23 @@ set(VISUALIZER_LIBS
     Qt6::OpenGLWidgets
 )
 
-add_executable(ZEDRecPlay 
+add_executable(ZEDRecPlay
     ZEDRecPlay.cpp
 )
 target_include_directories(ZEDRecPlay PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+    ${CMAKE_BINARY_DIR}/proto  # For generated protobuf headers
 )
 # Require C99 and C++17
-target_compile_features(ZEDRecPlay PUBLIC 
-    c_std_99 
+target_compile_features(ZEDRecPlay PUBLIC
+    c_std_99
     cxx_std_17
 )
 target_link_libraries(ZEDRecPlay
     Orbis_SLAM_pipeline
     ${VISUALIZER_LIBS}
+    ZED_custom_frame_protobuf_lib
 )
 
 

@@ -75,6 +75,7 @@ else()
     SET(ZED_LIBS ${ZED_STATIC_LIBRARIES} ${CUDA_CUDA_LIBRARY} ${CUDA_LIBRARY})
 endif()
 
+add_subdirectory(proto)
 add_subdirectory(src)
 add_subdirectory(app)
 
