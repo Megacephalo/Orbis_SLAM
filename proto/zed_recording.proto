@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package orbis_slam;
+
+// Camera intrinsic parameters
+message CameraIntrinsics {
+    // Focal lengths
+    double fx = 1;  // Focal length x
+    double fy = 2;  // Focal length y
+
+    // Principal point
+    double cx = 3;  // Principal point x
+    double cy = 4;  // Principal point y
+
+    // Distortion coefficients (radial and tangential)
+    repeated double distortion = 5;  // [k1, k2, p1, p2, k3, ...]
+
+    // Image dimensions
+    uint32 width = 6;
+    uint32 height = 7;
+}
+
+// Stereo camera calibration (baseline, etc.)
+message StereoCalibration {
+    // Baseline distance between left and right cameras (meters)
+    double baseline = 1;
+
+    // Rotation matrix from left to right camera (row-major 3x3)
+    repeated double rotation = 2;  // 9 elements: R[0,0], R[0,1], ..., R[2,2]
+
+    // Translation vector from left to right camera
+    repeated double translation = 3;  // 3 elements: [tx, ty, tz]
+}
+
+// 6-DOF camera pose (SE3)
+message CameraPose {
+    // Position (translation)
+    double tx = 1;
+    double ty = 2;
+    double tz = 3;
+
+    // Orientation as quaternion (w, x, y, z)
+    double qw = 4;
+    double qx = 5;
+    double qy = 6;
+    double qz = 7;
+
+    // Alternative: Rotation matrix (row-major 3x3) - optional
+    repeated double rotation_matrix = 8;  // 9 elements if provided
+}
+
+// Compressed image data
+message CompressedImage {
+    // Image encoding format
+    enum Format {
+        UNKNOWN = 0;
+        PNG = 1;
+        JPEG = 2;
+        WEBP = 3;
+        RAW = 4;  // Uncompressed raw bytes
+    }
+
+    Format format = 1;
+
+    // Compressed or raw image data
+    bytes data = 2;
+
+    // Original dimensions (before compression)
+    uint32 width = 3;
+    uint32 height = 4;
+
+    // Number of channels (1=grayscale, 3=RGB, 4=RGBA)
+    uint32 channels = 5;
+}
+
+// Single frame data
+message Frame {
+    // Unique frame identifier and timestamp
+    uint64 frame_index = 1;
+    uint64 timestamp_ns = 2;  // Nanoseconds since epoch
+
+    // Stereo images
+    CompressedImage left_image = 3;
+    CompressedImage right_image = 4;
+
+    // Depth image (registered to left camera)
+    // Can be stored as 16-bit or 32-bit depth values
+    CompressedImage depth_image = 5;
+
+    // Camera pose at this frame (world to camera transform)
+    CameraPose pose = 6;
+
+    // Optional: Additional metadata
+    bool is_keyframe = 7;  // Marked as keyframe for SLAM
+    double confidence = 8;  // Pose confidence/quality metric
+}
+
+// Complete recording session
+message Recording {
+    // Recording metadata
+    string recording_id = 1;
+    uint64 start_timestamp_ns = 2;
+    uint64 end_timestamp_ns = 3;
+
+    // Camera calibration (constant for all frames)
+    CameraIntrinsics left_intrinsics = 4;
+    CameraIntrinsics right_intrinsics = 5;
+    StereoCalibration stereo_calibration = 6;
+
+    // Frame data
+    repeated Frame frames = 7;
+
+    // Optional: Recording settings
+    double fps = 8;
+    string camera_model = 9;  // e.g., "ZED2", "ZED2i"
+    string description = 10;
+}
+
+// Alternative: Single frame message for streaming/incremental recording
+message FrameWithMetadata {
+    // Frame data
+    Frame frame = 1;
+
+    // Recording session info (for context)
+    string recording_id = 2;
+
+    // Camera calibration (can be sent once at start)
+    CameraIntrinsics left_intrinsics = 3;
+    CameraIntrinsics right_intrinsics = 4;
+    StereoCalibration stereo_calibration = 5;
+}
