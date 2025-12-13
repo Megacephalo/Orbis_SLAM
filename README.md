@@ -101,6 +101,22 @@ Orbis SLAM requires several key dependencies for optimal performance:
 | `tf2_ros` | Transform library |
 | `tf2_geometry_msgs` | TF2 geometry utilities |
 
+### Dataset recording and playback
+
+| Library | Version | Purpose | Installation |
+|---------|---------|---------|--------------|
+| **protobuf** | 3 | Data structure and engine to record and playback custom datasets used to evaluate this project | |
+
+To buoild the `.proto ` file, please insert the following commands:
+
+```bash
+# Change directory to the "proto" directory under this project's root directory
+cd /path/to/this/project/root/dir/proto
+
+# Build the proto file to be used by CPP programs
+protoc -I=. --cpp_out=. zed_recording.proto
+```
+
 ### Hardware Dependencies
 
 - **x86 or ARM machine**: A laptop or development kit with CUDA-enabled GPU

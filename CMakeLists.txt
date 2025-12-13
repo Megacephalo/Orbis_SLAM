@@ -31,13 +31,29 @@ find_package(CUDA ${ZED_CUDA_VERSION} REQUIRED)
 find_package(fmt REQUIRED)
 find_package(g2o REQUIRED)
 find_package(TBB REQUIRED)
+find_package(Qt6 COMPONENTS Core REQUIRED)
+# Protobuf for data recording
+find_package(Protobuf REQUIRED)
+
+# Generate protobuf files
+set(PROTO_FILES
+    ${PROJECT_SOURCE_DIR}/proto/zed_recording.proto
+)
+
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
+
+# Debug: Print generated files
+message(STATUS "Generated protobuf sources: ${PROTO_SRCS}")
+message(STATUS "Generated protobuf headers: ${PROTO_HDRS}")
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(${EIGEN3_INCLUDE_DIR})
 include_directories(${ZED_INCLUDE_DIRS})
 include_directories(${CUDA_INCLUDE_DIRS})
 include_directories(${Open3D_INCLUDE_DIRS})
+include_directories(${Protobuf_INCLUDE_DIRS})
 include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${CMAKE_SOURCE_DIR}/proto)
 
 link_directories(${ZED_LIBRARY_DIR})
 link_directories(${CUDA_LIBRARY_DIRS})
@@ -59,12 +75,10 @@ else()
     SET(ZED_LIBS ${ZED_STATIC_LIBRARIES} ${CUDA_CUDA_LIBRARY} ${CUDA_LIBRARY})
 endif()
 
+add_subdirectory(proto)
 add_subdirectory(src)
 add_subdirectory(app)
 
-install(TARGETS ${PROJECT_NAME}
-  DESTINATION lib/${PROJECT_NAME}
-)
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
 )
