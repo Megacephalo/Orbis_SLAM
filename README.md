@@ -101,21 +101,84 @@ Orbis SLAM requires several key dependencies for optimal performance:
 | `tf2_ros` | Transform library |
 | `tf2_geometry_msgs` | TF2 geometry utilities |
 
-### Dataset recording and playback
+### Dataset Recording and Playback
 
 | Library | Version | Purpose | Installation |
 |---------|---------|---------|--------------|
-| **protobuf** | 3 | Data structure and engine to record and playback custom datasets used to evaluate this project | |
+| **protobuf** | 3 | Data serialization for recording and playback | `sudo apt install -y protobuf-compiler libprotobuf-dev` |
+| **Qt6** | 6.x | GUI for recorder/player tool | `sudo apt install -y qt6-base-dev libqt6opengl6-dev` |
+| **GLM** | Latest | OpenGL mathematics for visualization | `sudo apt install -y libglm-dev` |
 
-To buoild the `.proto ` file, please insert the following commands:
+#### Building Protocol Buffers
+
+The project uses Protocol Buffers to serialize ZED camera data. Build the proto definitions:
 
 ```bash
-# Change directory to the "proto" directory under this project's root directory
-cd /path/to/this/project/root/dir/proto
+# Navigate to the proto directory
+cd /path/to/orbis_slam/proto
 
-# Build the proto file to be used by CPP programs
+# Generate C++ code from proto definitions
 protoc -I=. --cpp_out=. zed_recording.proto
 ```
+
+**Note**: This step is automatically handled by the CMake build system when you build the package.
+
+#### Recording ZED Data
+
+Use the `ZEDRecPlay` GUI tool to record ZED camera data:
+
+```bash
+# Launch the recorder/player tool
+ros2 run orbis_slam ZEDRecPlay
+```
+
+**Features**:
+- Real-time stereo video preview (left and right cameras)
+- Record ZED camera frames with depth data
+- Camera pose tracking and visualization
+- Configurable recording settings
+- Save recordings to protobuf format (`.pb` files)
+
+#### Playing Back Recorded Data
+
+To play back recorded datasets through the SLAM pipeline:
+
+```bash
+# Run the playback node with a recording file
+ros2 run orbis_slam zed_playback_node --ros-args \
+  -p recording_file:=/path/to/your/recording.pb \
+  -p playback_rate:=1.0 \
+  -p enable_slam:=true
+```
+
+Alternatively, use the provided launch file for easier parameter configuration:
+
+```bash
+ros2 launch orbis_slam zed_playback.launch.py
+```
+
+The launch file `zed_playback.launch.py` provides a convenient way to configure all playback parameters. See the parameter list below for available options.
+
+**Parameters**:
+- `recording_file`: Path to the `.pb` recording file (required)
+- `playback_rate`: Playback speed multiplier (default: 1.0)
+- `enable_slam`: Enable backend pose optimization (default: true)
+- `world_frame`: Global reference frame (default: "map")
+- `odom_frame`: Odometry frame (default: "odom")
+- `robot_baselink_frame`: Robot base frame (default: "base_link")
+- `left_camera_frame`: Left camera frame (default: "left_camera_frame")
+
+**Published Topics**:
+- `~/left/image_raw`: Left camera images
+- `~/right/image_raw`: Right camera images
+- `~/depth/image_raw`: Depth images
+- `/tf`: Transform tree with SLAM poses
+
+The playback node processes recorded data through the full Orbis SLAM pipeline, allowing you to:
+- Test and debug SLAM algorithms offline
+- Evaluate performance on recorded datasets
+- Reproduce and analyze specific scenarios
+- Develop without requiring physical camera hardware
 
 ### Hardware Dependencies
 
