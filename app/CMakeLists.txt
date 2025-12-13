@@ -13,6 +13,7 @@ find_package(glm REQUIRED)
 set(OpenGL_GL_PREFERENCE GLVND)
 cmake_policy(SET CMP0072 NEW)
 
+# orbis_slam_node
 add_executable(${PROJECT_NAME}_node
     orbis_slam_main.cpp
 )
@@ -20,7 +21,7 @@ target_include_directories(${PROJECT_NAME}_node PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-# Require C99 and C++17
+## Require C99 and C++17
 target_compile_features(${PROJECT_NAME}_node  PUBLIC 
     c_std_99 
     cxx_std_17
@@ -29,7 +30,38 @@ target_link_libraries(${PROJECT_NAME}_node
     Orbis_SLAM_pipeline
 )
 
+# orbis_slam_playback_node
+add_executable(${PROJECT_NAME}_playback_node
+    zed_playback_node.cpp
+)
+target_include_directories(${PROJECT_NAME}_playback_node PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+    ${CMAKE_BINARY_DIR}/proto  # For generated protobuf headers
+)
+## Require C99 and C++17
+target_compile_features(${PROJECT_NAME}_playback_node PUBLIC
+    c_std_99
+    cxx_std_17
+)
+ament_target_dependencies(${PROJECT_NAME}_playback_node
+    rclcpp
+    std_msgs
+    sensor_msgs
+    geometry_msgs
+    tf2
+    tf2_ros
+    tf2_geometry_msgs
+    cv_bridge
+)
+target_link_libraries(${PROJECT_NAME}_playback_node
+    Orbis_SLAM_pipeline
+    ZED_custom_frame_protobuf_lib
+    ${OpenCV_LIBS}
+)
 
+
+# ZEDRecPlay executable
 set(VISUALIZER_LIBS
     Qt6::Core
     Qt6::Gui
@@ -60,8 +92,11 @@ target_link_libraries(ZEDRecPlay
 )
 
 
+
+
 install(TARGETS 
-  ${PROJECT_NAME}_node 
+  ${PROJECT_NAME}_node
+  ${PROJECT_NAME}_playback_node
   ZEDRecPlay
   DESTINATION lib/${PROJECT_NAME}
 )
