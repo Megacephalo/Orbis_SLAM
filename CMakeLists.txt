@@ -34,6 +34,8 @@ find_package(TBB REQUIRED)
 find_package(Qt6 COMPONENTS Core REQUIRED)
 # Protobuf for data recording
 find_package(Protobuf REQUIRED)
+# DBoW3 for loop closure detection
+find_package(DBoW3 REQUIRED)
 
 # Generate protobuf files
 set(PROTO_FILES
@@ -52,6 +54,7 @@ include_directories(${ZED_INCLUDE_DIRS})
 include_directories(${CUDA_INCLUDE_DIRS})
 include_directories(${Open3D_INCLUDE_DIRS})
 include_directories(${Protobuf_INCLUDE_DIRS})
+include_directories(${DBoW3_INCLUDE_DIRS})
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${CMAKE_SOURCE_DIR}/proto)
 
@@ -60,6 +63,7 @@ link_directories(${CUDA_LIBRARY_DIRS})
 link_directories(${OpenCV_LIBRARY_DIRS})
 link_directories(${EIGEN3_LIBRARY_DIRS})
 link_directories(${Open3D_LIBRARY_DIRS})
+link_directories(${DBoW3_LIBRARY_DIRS})
 
 # Check if static libraries exist, otherwise use shared
 if(EXISTS "${ZED_STATIC_LIBRARIES}")

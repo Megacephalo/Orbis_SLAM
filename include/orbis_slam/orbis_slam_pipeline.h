@@ -19,6 +19,9 @@
 #include "orbis_slam/essential_data_structure.h"
 #include "orbis_slam/keyframe_selector.h"
 #include "orbis_slam/pose_optimizer.h"
+#include "orbis_slam/feature_extractor.h"
+#include "orbis_slam/covisibility_graph.h"
+#include "orbis_slam/loop_closure_detector.h"
 
 namespace Orbis {
 
@@ -42,6 +45,12 @@ class OrbisSLAMPipeline : public rclcpp::Node {
     Frame::Ptr last_keyframe_;
     Trajectory::Ptr trajectory_;
 
+    // Loop closure components (integral part of SLAM)
+    FeatureExtractor::Ptr feature_extractor_;
+    CovisibilityGraph::Ptr covisibility_graph_;
+    LoopClosureDetector::Ptr loop_closure_detector_;
+    std::string vocabulary_path_;
+
   public:
     OrbisSLAMPipeline();
     ~OrbisSLAMPipeline() = default;  // WIP: for now
@@ -56,6 +65,24 @@ class OrbisSLAMPipeline : public rclcpp::Node {
   private:
     void setupParameters();
     void broadcastTF(const tf2::Transform& transf, const std::string& parent_frame, const std::string& child_frame, const rclcpp::Time& timestamp);
+
+    /**
+     * @brief Callback for loop closure detection
+     *
+     * This is called by the loop closure detector when a verified loop is found.
+     * It adds the loop constraint to the pose graph and triggers optimization.
+     *
+     * @param candidate Loop closure candidate with relative pose constraint
+     */
+    void onLoopClosureDetected(const LoopClosureDetector::LoopCandidate& candidate);
+
+    /**
+     * @brief Extract features and 3D map points for a frame
+     *
+     * @param frame Frame to process
+     * @param image Left camera image
+     */
+    void extractFeaturesAndMapPoints(Frame::Ptr frame, const cv::Mat& image);
 }; /* class OrbisSLAMPipeline */
 
 } /* namespace Orbis */
