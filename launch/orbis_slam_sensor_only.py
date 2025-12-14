@@ -23,10 +23,15 @@ def generate_launch_description():
     )
     
     
-    # Define the ORB-SLAM3 node
+    # Default vocabulary path for loop closure (integral part of SLAM)
+    import os
+    default_vocab_path = os.path.join(pkg_orbis_slam, '..', '..', 'src', 'orbis_slam',
+                                      'third_party', 'DBow3', 'orbvoc.dbow3')
+
+    # Define the ORB-SLAM node
     orbis_slam_node = Node(
         package='orbis_slam',
-        executable='orbis_slam',
+        executable='orbis_slam_node',
         name='orbis_slam_node',
         output='screen',
         parameters=[{
@@ -34,6 +39,7 @@ def generate_launch_description():
             'robot_baselink_frame'  : 'zed2i_camera_link',
             'left_camera_frame'     : 'zed2i_left_camera_optical_frame',
             'enable_slam'           : True,
+            'vocabulary_path'       : default_vocab_path,
         }]
     )
     
