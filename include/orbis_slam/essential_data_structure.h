@@ -17,6 +17,9 @@
 #include <sophus/se3.hpp>
 #include <sophus/so3.hpp>
 
+#include <opencv2/core.hpp>
+#include <opencv2/features2d.hpp>
+
 namespace Orbis{
 
 struct Frame {
@@ -24,6 +27,12 @@ struct Frame {
     Sophus::SE3d pose;
     double timestamp;
     std::atomic<bool> is_keyframe;
+
+    // Feature data for loop closure detection
+    std::vector<cv::KeyPoint> keypoints;  // 2D keypoint locations
+    cv::Mat descriptors;  // Feature descriptors (ORB)
+    std::vector<cv::Point3f> map_points;  // 3D map points corresponding to keypoints
+    std::vector<bool> valid_map_points;  // Validity flags for map points
 
     explicit Frame(const uint64_t& id)
     : id(id), pose(Sophus::SE3d()), timestamp(0.0), is_keyframe(false) {}
@@ -34,7 +43,9 @@ struct Frame {
     ~Frame() = default;
 
     Frame(const Frame& other)
-    : id(other.id), pose(other.pose), timestamp(other.timestamp), is_keyframe(other.is_keyframe.load()) {}
+    : id(other.id), pose(other.pose), timestamp(other.timestamp), is_keyframe(other.is_keyframe.load())
+    , keypoints(other.keypoints), descriptors(other.descriptors.clone())
+    , map_points(other.map_points), valid_map_points(other.valid_map_points) {}
 
     Frame& operator = (const Frame& other) {
         if (this != &other) {
@@ -42,12 +53,18 @@ struct Frame {
             pose = other.pose;
             is_keyframe = other.is_keyframe.load();
             timestamp = other.timestamp;
+            keypoints = other.keypoints;
+            descriptors = other.descriptors.clone();
+            map_points = other.map_points;
+            valid_map_points = other.valid_map_points;
         }
         return *this;
     }
 
     Frame(Frame&& other) noexcept
-    : id(other.id), pose(other.pose), timestamp(other.timestamp), is_keyframe(other.is_keyframe.load()) {
+    : id(other.id), pose(other.pose), timestamp(other.timestamp), is_keyframe(other.is_keyframe.load())
+    , keypoints(std::move(other.keypoints)), descriptors(std::move(other.descriptors))
+    , map_points(std::move(other.map_points)), valid_map_points(std::move(other.valid_map_points)) {
         other.id = 0;
         other.pose = Sophus::SE3d();
         other.timestamp = 0.0;
@@ -60,6 +77,10 @@ struct Frame {
             pose = other.pose;
             is_keyframe = other.is_keyframe.load();
             timestamp = other.timestamp;
+            keypoints = std::move(other.keypoints);
+            descriptors = std::move(other.descriptors);
+            map_points = std::move(other.map_points);
+            valid_map_points = std::move(other.valid_map_points);
             other.id = 0;
             other.pose = Sophus::SE3d();
             other.is_keyframe = false;

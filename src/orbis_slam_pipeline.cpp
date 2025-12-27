@@ -22,6 +22,39 @@ OrbisSLAMPipeline::OrbisSLAMPipeline()
     trajectory_ = Trajectory::create();
     pose_optimizer_.setTrajectory(trajectory_);
 
+    // Initialize loop closure components (integral part of SLAM)
+    if (enable_slam_) {
+        RCLCPP_INFO(this->get_logger(), "Initializing loop closure detection...");
+
+        // Create feature extractor
+        feature_extractor_ = FeatureExtractor::create(1000, 1.2f, 8);
+
+        // Create covisibility graph
+        covisibility_graph_ = CovisibilityGraph::create(15);
+
+        // Create loop closure detector
+        loop_closure_detector_ = LoopClosureDetector::create(
+            vocabulary_path_,
+            covisibility_graph_,
+            trajectory_,
+            0.7,  // min similarity score
+            30    // min temporal separation
+        );
+
+        // Set loop closure callback
+        loop_closure_detector_->setOptimizationCallback(
+            std::bind(&OrbisSLAMPipeline::onLoopClosureDetected, this, std::placeholders::_1)
+        );
+
+        // Start loop closure thread
+        if (loop_closure_detector_->isReady()) {
+            loop_closure_detector_->start();
+            RCLCPP_INFO(this->get_logger(), "Loop closure detection started successfully.");
+        } else {
+            RCLCPP_WARN(this->get_logger(), "Loop closure vocabulary not loaded. Loop closure will not be available.");
+        }
+    }
+
     // create a timer to process frame at the requested frequency
     timer_ = this->create_wall_timer(
         std::chrono::milliseconds(1000 / zed_wrapper_.getCameraFPS()),
@@ -36,12 +69,19 @@ OrbisSLAMPipeline::setupParameters() {
     this->declare_parameter<std::string>("robot_baselink_frame", "base_link");
     this->declare_parameter<std::string>("left_camera_frame", "left_camera_frame");
     this->declare_parameter<bool>("enable_slam", false);
+    this->declare_parameter<std::string>("vocabulary_path", "");
 
     world_frame_ = this->get_parameter("world_frame").as_string();
     odom_frame_ = this->get_parameter("odom_frame").as_string();
     robot_baselink_frame_ = this->get_parameter("robot_baselink_frame").as_string();
     left_camera_frame_ = this->get_parameter("left_camera_frame").as_string();
     enable_slam_ = this->get_parameter("enable_slam").as_bool();
+    vocabulary_path_ = this->get_parameter("vocabulary_path").as_string();
+
+    // Validate vocabulary path for loop closure (integral part of SLAM)
+    if (enable_slam_ && vocabulary_path_.empty()) {
+        RCLCPP_WARN(this->get_logger(), "SLAM enabled but vocabulary_path not set. Loop closure will not be available.");
+    }
 }
 
 void
@@ -125,26 +165,48 @@ OrbisSLAMPipeline::processFrame() {
         return;
     }
 
-    // TODO: get the T_prev_curr_ and optimize in terms of pose-graph
+    // get the T_prev_curr_ and optimize in terms of pose-graph
     Frame::Ptr curr_frame = Frame::create(curr_frame_id_++, toSophus(T_w_c), false, current_time.seconds());
 
     keyframe_selector_.processFrame(curr_frame);
 
     if (! curr_frame->isKeyFrame() ) return;
 
+    // Extract features and 3D map points for loop closure (integral to SLAM)
+    cv::Mat left_image = zed_wrapper_.getLeftImage();
+    extractFeaturesAndMapPoints(curr_frame, left_image);
+
     trajectory_->pushBack(curr_frame);
 
     if (trajectory_->size() == 1) {
         last_keyframe_ = curr_frame;
         pose_optimizer_.addPoseVertex( curr_frame, true ); // fix the first keyframe at the origin
+
+        // Add first keyframe to covisibility graph
+        if (covisibility_graph_) {
+            covisibility_graph_->addKeyframe(curr_frame->id);
+        }
         return;
     }
-    
+
     pose_optimizer_.addPoseVertex( curr_frame, false);
 
     // // add the relative motion edge
     Eigen::Matrix<double, 6, 6> information = PoseOptimizer::createInformationMatrix(T_w_c);
     pose_optimizer_.addRelativeMotionEdgeFromPoses(last_keyframe_, curr_frame, information);
+
+    // Update covisibility graph and loop closure detection
+    if (covisibility_graph_ && loop_closure_detector_) {
+        covisibility_graph_->addKeyframe(curr_frame->id);
+        covisibility_graph_->updateCovisibility(
+            last_keyframe_->id, curr_frame->id,
+            last_keyframe_->map_points, curr_frame->map_points,
+            last_keyframe_->valid_map_points, curr_frame->valid_map_points
+        );
+
+        // Add keyframe to loop closure detector queue
+        loop_closure_detector_->addKeyframe(curr_frame);
+    }
 
     if (pose_optimizer_.shouldOptimize(current_time.seconds())) {
         pose_optimizer_.requestOptimization(current_time.seconds());
@@ -194,6 +256,81 @@ OrbisSLAMPipeline::broadcastTF(const tf2::Transform& transf, const std::string& 
     tf_msg.transform.rotation.w = transf.getRotation().w();
 
     tf_broadcaster_->sendTransform(tf_msg);
+}
+
+void
+OrbisSLAMPipeline::onLoopClosureDetected(const LoopClosureDetector::LoopCandidate& candidate) {
+    RCLCPP_INFO(this->get_logger(),
+        "Loop closure callback: KF %lu -> KF %lu (score: %.3f)",
+        candidate.query_keyframe_id, candidate.match_keyframe_id, candidate.similarity_score);
+
+    // Add loop closure constraint to pose graph
+    pose_optimizer_.addRelativeMotionEdge(
+        candidate.match_keyframe_id,
+        candidate.query_keyframe_id,
+        candidate.relative_pose,
+        candidate.information
+    );
+
+    // Trigger global optimization
+    double current_time = this->get_clock()->now().seconds();
+    pose_optimizer_.requestOptimization(current_time);
+
+    RCLCPP_INFO(this->get_logger(), "Global optimization triggered by loop closure.");
+}
+
+void
+OrbisSLAMPipeline::extractFeaturesAndMapPoints(Frame::Ptr frame, const cv::Mat& image) {
+    if (!feature_extractor_ || image.empty()) {
+        return;
+    }
+
+    // Extract ORB features
+    std::vector<cv::KeyPoint> keypoints;
+    cv::Mat descriptors;
+
+    if (!feature_extractor_->extract(image, keypoints, descriptors)) {
+        RCLCPP_WARN(this->get_logger(), "Failed to extract features from frame %lu", frame->id);
+        return;
+    }
+
+    // Get 3D correspondences from ZED point cloud
+    std::vector<cv::Point2f> keypoints_2d;
+    keypoints_2d.reserve(keypoints.size());
+    for (const auto& kp : keypoints) {
+        keypoints_2d.push_back(kp.pt);
+    }
+
+    std::vector<cv::Point3f> map_points_3d;
+    zed_wrapper_.get3DCorrespondences(keypoints_2d, map_points_3d);
+
+    // Create validity flags
+    std::vector<bool> valid_flags(keypoints.size(), false);
+    size_t valid_count = 0;
+
+    // Match the 3D points back to keypoints
+    // Since get3DCorrespondences may skip invalid points, we need to track which ones are valid
+    for (size_t i = 0; i < keypoints.size() && valid_count < map_points_3d.size(); ++i) {
+        if (valid_count < map_points_3d.size()) {
+            valid_flags[i] = true;
+            valid_count++;
+        }
+    }
+
+    // Pad map_points_3d to match keypoints size
+    while (map_points_3d.size() < keypoints.size()) {
+        map_points_3d.emplace_back(0.0f, 0.0f, 0.0f);
+    }
+
+    // Store in frame
+    frame->keypoints = std::move(keypoints);
+    frame->descriptors = descriptors.clone();
+    frame->map_points = std::move(map_points_3d);
+    frame->valid_map_points = std::move(valid_flags);
+
+    RCLCPP_DEBUG(this->get_logger(),
+        "Extracted %zu features for frame %lu (%zu with valid 3D points)",
+        frame->keypoints.size(), frame->id, valid_count);
 }
 
 } /* namespace Orbis */

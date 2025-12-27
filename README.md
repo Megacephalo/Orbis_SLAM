@@ -43,34 +43,38 @@ The system is specifically optimized for Stereolabs' ZED camera setups and provi
 
 ### Key Components
 
-- **Visual Frontend**: Stereo camera processing and feature extraction
+- **Visual Frontend**: Stereo camera processing and ORB feature extraction
+- **Loop Closure Detection**: DBoW3-based place recognition with automatic vocabulary building
+- **Covisibility Graph**: Tracks keyframe relationships and shared map points
 - **Keyframe Management**: Intelligent keyframe selection for mapping
-- **Pose Optimization**: Bundle adjustment using g2o
+- **Pose Optimization**: Bundle adjustment and pose graph optimization using g2o
 - **Transform Integration**: Seamless integration with ROS 2 tf2 system
 
 ## Features
 
-✅ **Real-time stereo visual SLAM**  
-✅ **ROS 2 Humble compatibility out of the box**  
-✅ **Independent of `zed-ros2-wrapper`**  
-✅ **Leverages ZED SDK and CUDA - popular, mature industry-standard libraries**  
-✅ **Cross-platform support for x86 and ARM machines - easy deployment on NVIDIA development kits**  
-✅ **Minimal dependencies for simplified maintenance and code clarity**  
-✅ **Advanced graph-based pose optimization with g2o**  
-✅ **Lie algebra-based transformations with Sophus**  
-✅ **Modular and extensible architecture**  
+✅ **Real-time stereo visual SLAM**
+✅ **DBoW3-based loop closure detection** - Automatic place recognition and global optimization
+✅ **Automatic vocabulary creation** - No pre-trained vocabulary required, builds from your environment
+✅ **Covisibility graph tracking** - Efficient keyframe relationship management
+✅ **ROS 2 Humble compatibility out of the box**
+✅ **Independent of `zed-ros2-wrapper`**
+✅ **Leverages ZED SDK and CUDA - popular, mature industry-standard libraries**
+✅ **Cross-platform support for x86 and ARM machines - easy deployment on NVIDIA development kits**
+✅ **Minimal dependencies for simplified maintenance and code clarity**
+✅ **Advanced graph-based pose optimization with g2o**
+✅ **Lie algebra-based transformations with Sophus**
+✅ **Modular and extensible architecture**
 ✅ **TF2 integration for coordinate transformations - seamless robot integration**
 
 ### 🚧 **Planned Features**
-🔄 Enhanced cross-platform compatibility  
-🔄 Modern loop closure detection  
-🔄 Generalized visual odometry frontend (support for additional camera types)  
-🔄 IMU integration  
-🔄 Dense mapping capabilities  
-🔄 Plugin-based architecture  
-🔄 Benchmark tools  
-🔄 Real-time tuning and visualization  
-🔄 Comprehensive automated CI/CD pipeline  
+🔄 Enhanced cross-platform compatibility
+🔄 Generalized visual odometry frontend (support for additional camera types)
+🔄 IMU integration
+🔄 Dense mapping capabilities
+🔄 Plugin-based architecture
+🔄 Benchmark tools
+🔄 Real-time tuning and visualization
+🔄 Comprehensive automated CI/CD pipeline
 🔄 Containerization support  
 
 ## Dependencies
@@ -84,9 +88,11 @@ Orbis SLAM requires several key dependencies for optimal performance:
 | **Ceres Solver** | Latest | Non-linear optimization | Build from source (included as submodule) |
 | **Sophus** | Latest | Lie algebra operations | Build from source (included as submodule) |
 | **g2o** | Latest | Graph optimization | Build from source (included as submodule) |
+| **DBoW3** | Latest | Loop closure detection | System install or build from source |
 | **Eigen3** | 3.3+ | Linear algebra | `sudo apt install libeigen3-dev` |
 | **TBB** | Latest | Parallel computing | `sudo apt install libtbb-dev` |
 | **FMT** | Latest | String formatting | `sudo apt install libfmt-dev` |
+| **OpenCV** | 4.x+ | Computer vision and ORB features | Included with ROS 2 or `sudo apt install libopencv-dev` |
 
 ### ROS 2 Dependencies
 

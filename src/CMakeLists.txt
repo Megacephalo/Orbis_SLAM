@@ -11,6 +11,10 @@ add_library(Orbis_SLAM_pipeline SHARED
     keyframe_selector.cpp
     zed_recorder.cpp
     zed_backend_worker.cpp
+    feature_extractor.cpp
+    covisibility_graph.cpp
+    loop_closure_detector.cpp
+    vocabulary_manager.cpp
     ${PROJECT_SOURCE_DIR}/include/orbis_slam/recorder_and_player/zed_backend_worker.h
 )
 
@@ -43,6 +47,7 @@ target_link_libraries(Orbis_SLAM_pipeline
     ${ZED_LIBS}
     ${OpenCV_LIBS}
     ${EIGEN3_LIBS}
+    ${DBoW3_LIBS}
     Sophus::Sophus
     fmt::fmt
     g2o::core
