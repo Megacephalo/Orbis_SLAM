@@ -46,8 +46,9 @@ target_compile_features(Orbis_SLAM_pipeline PUBLIC
 target_link_libraries(Orbis_SLAM_pipeline
     ${ZED_LIBS}
     ${OpenCV_LIBS}
-    ${EIGEN3_LIBS}
+    # ${EIGEN3_LIBS}
     ${DBoW3_LIBS}
+    Eigen3::Eigen
     Sophus::Sophus
     fmt::fmt
     g2o::core
