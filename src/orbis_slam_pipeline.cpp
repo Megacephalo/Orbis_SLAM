@@ -2,30 +2,18 @@
 
 namespace Orbis {
 
-OrbisSLAMPipeline::OrbisSLAMPipeline()
-: Node("orbis_slam_pipeline_node")
+OrbisSLAMPipeline::OrbisSLAMPipeline(bool use_camera)
+: use_camera_(use_camera)
 , curr_frame_id_(0)
 , last_keyframe_(nullptr)
 {
-    bool camera_ready = zed_wrapper_.setup();
-    if ( ! camera_ready ) {
-        throw std::runtime_error("Camera setup failed. Exit.");
-    }
-
     setupParameters();
-
-    // initialize the TF broadcaster
-    tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
-    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
     trajectory_ = Trajectory::create();
     pose_optimizer_.setTrajectory(trajectory_);
 
     // Initialize loop closure components (integral part of SLAM)
     if (enable_slam_) {
-        RCLCPP_INFO(this->get_logger(), "Initializing loop closure detection...");
-
         // Create feature extractor
         feature_extractor_ = FeatureExtractor::create(1000, 1.2f, 8);
 
@@ -49,131 +37,57 @@ OrbisSLAMPipeline::OrbisSLAMPipeline()
         // Start loop closure thread
         if (loop_closure_detector_->isReady()) {
             loop_closure_detector_->start();
-            RCLCPP_INFO(this->get_logger(), "Loop closure detection started successfully.");
+            std::cout << "Loop closure detection started successfully." << std::endl;
         } else {
-            RCLCPP_WARN(this->get_logger(), "Loop closure vocabulary not loaded. Loop closure will not be available.");
+            std::cout << "Loop closure vocabulary not loaded. Loop closure will not be available." << std::endl;
         }
     }
 
-    // create a timer to process frame at the requested frequency
-    timer_ = this->create_wall_timer(
-        std::chrono::milliseconds(1000 / zed_wrapper_.getCameraFPS()),
-        std::bind(&OrbisSLAMPipeline::processFrame, this)
-    );
+    // Note: Timer creation is now handled by wrapper nodes (ZED_Live_Node)
+    // The pipeline no longer manages its own timer since it's not a ROS 2 node
 } /* ctor */
 
 void
 OrbisSLAMPipeline::setupParameters() {
-    this->declare_parameter<std::string>("world_frame", "map");
-    this->declare_parameter<std::string>("odom_frame", "odom");
-    this->declare_parameter<std::string>("robot_baselink_frame", "base_link");
-    this->declare_parameter<std::string>("left_camera_frame", "left_camera_frame");
-    this->declare_parameter<bool>("enable_slam", false);
-    this->declare_parameter<std::string>("vocabulary_path", "");
+    // Default parameters - these should be set by the wrapper node
+    enable_slam_ = false;
+    vocabulary_path_ = "";
 
-    world_frame_ = this->get_parameter("world_frame").as_string();
-    odom_frame_ = this->get_parameter("odom_frame").as_string();
-    robot_baselink_frame_ = this->get_parameter("robot_baselink_frame").as_string();
-    left_camera_frame_ = this->get_parameter("left_camera_frame").as_string();
-    enable_slam_ = this->get_parameter("enable_slam").as_bool();
-    vocabulary_path_ = this->get_parameter("vocabulary_path").as_string();
-
-    // Validate vocabulary path for loop closure (integral part of SLAM)
-    if (enable_slam_ && vocabulary_path_.empty()) {
-        RCLCPP_WARN(this->get_logger(), "SLAM enabled but vocabulary_path not set. Loop closure will not be available.");
-    }
+    // Note: Parameters are now managed by wrapper nodes (ZED_Live_Node, ZED_Playback_Node)
+    // The pipeline receives necessary configuration through constructor or setter methods
 }
 
 void
 OrbisSLAMPipeline::processFrame() {
-    if ( ! rclcpp::ok() ) {
-        RCLCPP_INFO(this->get_logger(), "ROS2 halted. Exit.");
-        return;
-    }
-    
-    if ( ! zed_wrapper_.hasNewFrame() ) {
-        RCLCPP_WARN(this->get_logger(), "No new frame from camera.");
-        return;
-    }
+    // This method is deprecated and should not be called.
+    // Frame processing is now handled by wrapper nodes (ZED_Live_Node, ZED_Playback_Node)
+    // which call processSLAMFrame() directly with appropriate data.
+    std::cerr << "WARNING: OrbisSLAMPipeline::processFrame() is deprecated. "
+              << "Use processSLAMFrame() from wrapper nodes instead." << std::endl;
+} /* processFrame */
 
-    zed_wrapper_.grabFrame();
-
-    // Publish odometry pose as TF
-    // step 1: T_odom_left_camera
-    sl::Pose T_w_c = zed_wrapper_.sl_getPose();
-    auto curr_translation = T_w_c.getTranslation();
-    auto curr_orientation = T_w_c.getOrientation();
-
-    tf2::Transform T_odom_leftCamera;
-    T_odom_leftCamera.setOrigin(tf2::Vector3(
-        curr_translation.x,
-        curr_translation.y,
-        curr_translation.z
-    ));
-    T_odom_leftCamera.setRotation(tf2::Quaternion(
-        curr_orientation.x,
-        curr_orientation.y,
-        curr_orientation.z,
-        curr_orientation.w
-    ));
-    // apply rotation: ZED to ROS camera frame conversion
-    tf2::Quaternion zed_to_ros_rotation;
-    tf2::Quaternion zed_quaternion(
-        curr_orientation.x,
-        curr_orientation.y,
-        curr_orientation.z,
-        curr_orientation.w
-    );
-    zed_to_ros_rotation.setRPY(-M_PI / 2, 0, -M_PI / 2); // Rotate to align ZED with ROS camera convention
-    // Combine the ZED orientation with the coordinate frame conversion
-    T_odom_leftCamera.setRotation(zed_quaternion * zed_to_ros_rotation);
-
-
-    // step 2: T_robot_leftCamera
-    geometry_msgs::msg::TransformStamped T_robot_leftCamera_msg;
-    T_robot_leftCamera_msg = tf_buffer_->lookupTransform(
-        robot_baselink_frame_,  // target frame
-        left_camera_frame_,    // source frame
-        tf2::TimePointZero,      // get the latest available
-        tf2::durationFromSec(1.0)   // wait for 1 second
-    );
-    tf2::Transform T_robot_leftCamera;
-    T_robot_leftCamera.setOrigin(tf2::Vector3(
-        T_robot_leftCamera_msg.transform.translation.x,
-        T_robot_leftCamera_msg.transform.translation.y,
-        T_robot_leftCamera_msg.transform.translation.z
-    ));
-    T_robot_leftCamera.setRotation(tf2::Quaternion(
-        T_robot_leftCamera_msg.transform.rotation.x,
-        T_robot_leftCamera_msg.transform.rotation.y,
-        T_robot_leftCamera_msg.transform.rotation.z,
-        T_robot_leftCamera_msg.transform.rotation.w
-    ));
-
-    // step 3: T_odom_robot = T_odom_left_camera * T_robot_leftCamera.inverse()
-    rclcpp::Time current_time = this->get_clock()->now();
-
-    tf2::Transform T_odom_robot = T_odom_leftCamera * T_robot_leftCamera.inverse();
-    broadcastTF(T_odom_robot, odom_frame_, robot_baselink_frame_, current_time);
-
-    
+bool
+OrbisSLAMPipeline::processSLAMFrame(
+    const Sophus::SE3d& T_w_c,
+    const cv::Mat& left_image,
+    double timestamp,
+    const Sophus::SE3d& T_odom_leftCamera)
+{
+    // Note: TF broadcasting is now handled by wrapper nodes
+    // This method focuses on pure SLAM processing
 
     if ( ! enable_slam_ ) {
-        tf2::Transform T_map_odom;
-        T_map_odom.setIdentity();
-        broadcastTF(T_map_odom, world_frame_, odom_frame_, current_time);
-        return;
+        return false;
     }
 
-    // get the T_prev_curr_ and optimize in terms of pose-graph
-    Frame::Ptr curr_frame = Frame::create(curr_frame_id_++, toSophus(T_w_c), false, current_time.seconds());
+    // Create current frame with the provided pose
+    Frame::Ptr curr_frame = Frame::create(curr_frame_id_++, T_w_c, false, timestamp);
 
     keyframe_selector_.processFrame(curr_frame);
 
-    if (! curr_frame->isKeyFrame() ) return;
+    if (! curr_frame->isKeyFrame() ) return false;
 
     // Extract features and 3D map points for loop closure (integral to SLAM)
-    cv::Mat left_image = zed_wrapper_.getLeftImage();
     extractFeaturesAndMapPoints(curr_frame, left_image);
 
     trajectory_->pushBack(curr_frame);
@@ -186,13 +100,14 @@ OrbisSLAMPipeline::processFrame() {
         if (covisibility_graph_) {
             covisibility_graph_->addKeyframe(curr_frame->id);
         }
-        return;
+        return true;
     }
 
     pose_optimizer_.addPoseVertex( curr_frame, false);
 
-    // // add the relative motion edge
-    Eigen::Matrix<double, 6, 6> information = PoseOptimizer::createInformationMatrix(T_w_c);
+    // Add the relative motion edge
+    // Create a simple identity information matrix since we don't have ZED covariance here
+    Eigen::Matrix<double, 6, 6> information = Eigen::Matrix<double, 6, 6>::Identity();
     pose_optimizer_.addRelativeMotionEdgeFromPoses(last_keyframe_, curr_frame, information);
 
     // Update covisibility graph and loop closure detection
@@ -208,61 +123,25 @@ OrbisSLAMPipeline::processFrame() {
         loop_closure_detector_->addKeyframe(curr_frame);
     }
 
-    if (pose_optimizer_.shouldOptimize(current_time.seconds())) {
-        pose_optimizer_.requestOptimization(current_time.seconds());
+    if (pose_optimizer_.shouldOptimize(timestamp)) {
+        pose_optimizer_.requestOptimization(timestamp);
     }
 
+    // Update frame pose with optimized value
     curr_frame->pose = pose_optimizer_.getPose(curr_frame->id);
 
-
-
-    // Publish the optimized pose as TF
-    tf2::Transform T_map_cam;
-    auto optimized_translation = curr_frame->pose.translation();
-    T_map_cam.setOrigin( tf2::Vector3(
-        optimized_translation.x(),
-        optimized_translation.y(),
-        optimized_translation.z()
-    ));
-    Eigen::Quaterniond q = curr_frame->pose.unit_quaternion();
-    T_map_cam.setRotation( tf2::Quaternion(
-        q.x(),
-        q.y(),
-        q.z(),
-        q.w()
-    ));
-    tf2::Transform T_map_odom = T_map_cam * T_odom_robot.inverse();
-    broadcastTF(T_map_odom, world_frame_, odom_frame_, this->get_clock()->now());
-
-    // TODO: Publish the global map as point cloud message
-    // TODO: Publish the left and right images as ROS2 image messages
+    // Note: TF broadcasting is handled by wrapper nodes
+    // The optimized pose is stored in curr_frame->pose and can be retrieved by the wrapper
 
     last_keyframe_ = curr_frame;
-} /* processFrame */
-
-void
-OrbisSLAMPipeline::broadcastTF(const tf2::Transform& transf, const std::string& parent_frame, const std::string& child_frame, const rclcpp::Time& timestamp) {
-    geometry_msgs::msg::TransformStamped tf_msg;
-    // tf_msg.header.stamp = this->get_clock()->now();
-    tf_msg.header.stamp = timestamp;
-    tf_msg.header.frame_id = parent_frame;
-    tf_msg.child_frame_id = child_frame;
-    tf_msg.transform.translation.x = transf.getOrigin().x();
-    tf_msg.transform.translation.y = transf.getOrigin().y();
-    tf_msg.transform.translation.z = transf.getOrigin().z();
-    tf_msg.transform.rotation.x = transf.getRotation().x();
-    tf_msg.transform.rotation.y = transf.getRotation().y();
-    tf_msg.transform.rotation.z = transf.getRotation().z();
-    tf_msg.transform.rotation.w = transf.getRotation().w();
-
-    tf_broadcaster_->sendTransform(tf_msg);
-}
+    return true;
+} /* processSLAMFrame */
 
 void
 OrbisSLAMPipeline::onLoopClosureDetected(const LoopClosureDetector::LoopCandidate& candidate) {
-    RCLCPP_INFO(this->get_logger(),
-        "Loop closure callback: KF %lu -> KF %lu (score: %.3f)",
-        candidate.query_keyframe_id, candidate.match_keyframe_id, candidate.similarity_score);
+    std::cout << "Loop closure detected: KF " << candidate.query_keyframe_id
+              << " -> KF " << candidate.match_keyframe_id
+              << " (score: " << candidate.similarity_score << ")" << std::endl;
 
     // Add loop closure constraint to pose graph
     pose_optimizer_.addRelativeMotionEdge(
@@ -272,11 +151,11 @@ OrbisSLAMPipeline::onLoopClosureDetected(const LoopClosureDetector::LoopCandidat
         candidate.information
     );
 
-    // Trigger global optimization
-    double current_time = this->get_clock()->now().seconds();
-    pose_optimizer_.requestOptimization(current_time);
+    // Trigger global optimization immediately
+    // Use 0.0 as timestamp to force immediate optimization
+    pose_optimizer_.requestOptimization(0.0);
 
-    RCLCPP_INFO(this->get_logger(), "Global optimization triggered by loop closure.");
+    std::cout << "Global optimization triggered by loop closure." << std::endl;
 }
 
 void
@@ -290,37 +169,15 @@ OrbisSLAMPipeline::extractFeaturesAndMapPoints(Frame::Ptr frame, const cv::Mat& 
     cv::Mat descriptors;
 
     if (!feature_extractor_->extract(image, keypoints, descriptors)) {
-        RCLCPP_WARN(this->get_logger(), "Failed to extract features from frame %lu", frame->id);
+        std::cerr << "WARNING: Failed to extract features from frame " << frame->id << std::endl;
         return;
     }
 
-    // Get 3D correspondences from ZED point cloud
-    std::vector<cv::Point2f> keypoints_2d;
-    keypoints_2d.reserve(keypoints.size());
-    for (const auto& kp : keypoints) {
-        keypoints_2d.push_back(kp.pt);
-    }
-
-    std::vector<cv::Point3f> map_points_3d;
-    zed_wrapper_.get3DCorrespondences(keypoints_2d, map_points_3d);
-
-    // Create validity flags
+    // Note: 3D correspondences are now expected to be provided by wrapper nodes
+    // or computed separately. This method only handles feature extraction.
+    // For now, create placeholder map points (wrapper nodes should provide actual 3D data)
+    std::vector<cv::Point3f> map_points_3d(keypoints.size(), cv::Point3f(0.0f, 0.0f, 0.0f));
     std::vector<bool> valid_flags(keypoints.size(), false);
-    size_t valid_count = 0;
-
-    // Match the 3D points back to keypoints
-    // Since get3DCorrespondences may skip invalid points, we need to track which ones are valid
-    for (size_t i = 0; i < keypoints.size() && valid_count < map_points_3d.size(); ++i) {
-        if (valid_count < map_points_3d.size()) {
-            valid_flags[i] = true;
-            valid_count++;
-        }
-    }
-
-    // Pad map_points_3d to match keypoints size
-    while (map_points_3d.size() < keypoints.size()) {
-        map_points_3d.emplace_back(0.0f, 0.0f, 0.0f);
-    }
 
     // Store in frame
     frame->keypoints = std::move(keypoints);
@@ -328,9 +185,6 @@ OrbisSLAMPipeline::extractFeaturesAndMapPoints(Frame::Ptr frame, const cv::Mat& 
     frame->map_points = std::move(map_points_3d);
     frame->valid_map_points = std::move(valid_flags);
 
-    RCLCPP_DEBUG(this->get_logger(),
-        "Extracted %zu features for frame %lu (%zu with valid 3D points)",
-        frame->keypoints.size(), frame->id, valid_count);
+    // Note: Wrapper nodes should populate map_points and valid_map_points with actual 3D data
 }
-
 } /* namespace Orbis */

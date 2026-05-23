@@ -12,11 +12,13 @@
 #include <sensor_msgs/msg/image.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/opencv.hpp>
+#include <sophus/se3.hpp>
 
 #include "zed_recording.pb.h"
 #include "orbis_slam/essential_data_structure.h"
 #include "orbis_slam/keyframe_selector.h"
 #include "orbis_slam/pose_optimizer.h"
+#include "orbis_slam/orbis_slam_pipeline.h"
 
 namespace Orbis {
 
@@ -29,66 +31,54 @@ namespace Orbis {
  */
 class ZED_Playback_Node : public rclcpp::Node {
 private:
-    // SLAM pipeline components
-    Orbis::KeyFrameSelector keyframe_selector_;
-    Orbis::PoseOptimizer pose_optimizer_;
-    Orbis::Trajectory::Ptr trajectory_;
+    // SLAM pipeline (unified with live camera mode)
+    std::shared_ptr<Orbis::OrbisSLAMPipeline> slam_pipeline_;
 
     // ROS 2 infrastructure
     rclcpp::TimerBase::SharedPtr timer_;
+
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-    std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
-    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
     // Publishers
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr left_image_pub_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr right_image_pub_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr depth_image_pub_;
 
-    // Frame parameters
+    // Playback state
+    std::unique_ptr<orbis_slam::Recording> recording_;
+    uint64_t current_frame_idx_;
+    bool playback_active_;
+    double playback_rate_;
+    bool enable_loop_;
+
+    // File path
+    std::string recording_file_path_;
+
+    // TF frame names
     std::string world_frame_;
     std::string odom_frame_;
     std::string robot_baselink_frame_;
     std::string left_camera_frame_;
-    bool enable_slam_;
-
-    // Playback state
-    std::unique_ptr<orbis_slam::Recording> recording_;
-    uint64_t current_frame_idx_;
-    uint64_t curr_frame_id_;
-    Frame::Ptr last_keyframe_;
-    bool playback_active_;
-    double playback_rate_;
-
-    // File path
-    std::string recording_file_path_;
 
 public:
     ZED_Playback_Node()
     : Node("zed_playback_node")
     , current_frame_idx_(0)
-    , curr_frame_id_(0)
-    , last_keyframe_(nullptr)
     , playback_active_(false)
+    , enable_loop_(false)
     {
         RCLCPP_INFO(this->get_logger(), "ZED Playback Node initializing...");
 
         // Setup parameters
         setupParameters();
 
+        // Initialize TF broadcaster
+        tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
+
         // Load the recording file
         if (!loadRecording()) {
             throw std::runtime_error("Failed to load recording file: " + recording_file_path_);
         }
-
-        // Initialize TF broadcaster and listener
-        tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
-        tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-        tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
-
-        // Initialize trajectory and pose optimizer
-        trajectory_ = Trajectory::create();
-        pose_optimizer_.setTrajectory(trajectory_);
 
         // Create publishers
         left_image_pub_ = this->create_publisher<sensor_msgs::msg::Image>(
@@ -97,6 +87,9 @@ public:
             "~/right/image_raw", 10);
         depth_image_pub_ = this->create_publisher<sensor_msgs::msg::Image>(
             "~/depth/image_raw", 10);
+
+        // Initialize SLAM pipeline in headless mode (without ZED camera hardware)
+        slam_pipeline_ = std::make_shared<Orbis::OrbisSLAMPipeline>(false);  // false = no camera
 
         // Calculate playback timer interval based on recording FPS and playback rate
         double fps = recording_->fps() > 0 ? recording_->fps() : 30.0;
@@ -121,27 +114,36 @@ public:
 
 private:
     void setupParameters() {
-        // Frame names
-        this->declare_parameter<std::string>("world_frame", "map");
-        this->declare_parameter<std::string>("odom_frame", "odom");
-        this->declare_parameter<std::string>("robot_baselink_frame", "base_link");
-        this->declare_parameter<std::string>("left_camera_frame", "left_camera_frame");
-
-        // SLAM enable
-        this->declare_parameter<bool>("enable_slam", true);
-
         // Playback parameters
         this->declare_parameter<std::string>("recording_file", "");
         this->declare_parameter<double>("playback_rate", 1.0);
+        this->declare_parameter<bool>("enable_loop", false);
+
+        // TF frame parameters
+        this->declare_parameter<std::string>("world_frame", "map");
+        this->declare_parameter<std::string>("odom_frame", "odom");
+        this->declare_parameter<std::string>("robot_baselink_frame", "base_link");
+        this->declare_parameter<std::string>("left_camera_frame", "zed_left_camera_frame");
 
         // Get parameters
+        recording_file_path_ = this->get_parameter("recording_file").as_string();
+        playback_rate_ = this->get_parameter("playback_rate").as_double();
+
+        // Handle enable_loop - LaunchConfiguration passes strings, so handle both types
+        auto loop_param = this->get_parameter("enable_loop");
+        if (loop_param.get_type() == rclcpp::ParameterType::PARAMETER_BOOL) {
+            enable_loop_ = loop_param.as_bool();
+        } else if (loop_param.get_type() == rclcpp::ParameterType::PARAMETER_STRING) {
+            std::string loop_str = loop_param.as_string();
+            enable_loop_ = (loop_str == "true" || loop_str == "True" || loop_str == "1");
+        } else {
+            enable_loop_ = false;
+        }
+        RCLCPP_INFO(this->get_logger(), "Looping playback: %s", enable_loop_ ? "enabled" : "disabled");
         world_frame_ = this->get_parameter("world_frame").as_string();
         odom_frame_ = this->get_parameter("odom_frame").as_string();
         robot_baselink_frame_ = this->get_parameter("robot_baselink_frame").as_string();
         left_camera_frame_ = this->get_parameter("left_camera_frame").as_string();
-        enable_slam_ = this->get_parameter("enable_slam").as_bool();
-        recording_file_path_ = this->get_parameter("recording_file").as_string();
-        playback_rate_ = this->get_parameter("playback_rate").as_double();
 
         // Validate recording file path
         if (recording_file_path_.empty()) {
@@ -153,6 +155,10 @@ private:
             RCLCPP_WARN(this->get_logger(), "Invalid playback_rate %.2f, setting to 1.0", playback_rate_);
             playback_rate_ = 1.0;
         }
+
+        RCLCPP_INFO(this->get_logger(), "TF Frames: %s -> %s -> %s -> %s",
+                    world_frame_.c_str(), odom_frame_.c_str(),
+                    robot_baselink_frame_.c_str(), left_camera_frame_.c_str());
     }
 
     bool loadRecording() {
@@ -189,27 +195,117 @@ private:
 
         // Check if we've reached the end of the recording
         if (current_frame_idx_ >= static_cast<uint64_t>(recording_->frames_size())) {
-            RCLCPP_INFO(this->get_logger(), "Playback complete. Processed %lu frames.",
-                       current_frame_idx_);
-            playback_active_ = false;
-            timer_->cancel();
-            return;
+            if (enable_loop_) {
+                RCLCPP_INFO(this->get_logger(), "Looping playback. Restarting from frame 0.");
+                current_frame_idx_ = 0;
+            } else {
+                RCLCPP_INFO(this->get_logger(), "Playback complete. Processed %lu frames.",
+                           current_frame_idx_);
+                playback_active_ = false;
+                timer_->cancel();
+                return;
+            }
         }
 
         // Get current frame from recording
-        const orbis_slam::Frame& pb_frame = recording_->frames(current_frame_idx_);
+        const auto& pb_frame = recording_->frames(current_frame_idx_);
 
-        // Convert timestamp to ROS time
-        rclcpp::Time current_time = rclcpp::Time(pb_frame.timestamp_ns());
+        // Create timestamp - use current time for TF to avoid stale transform issues
+        double timestamp = pb_frame.timestamp_ns() / 1e9;  // Convert nanoseconds to seconds
+        rclcpp::Time ros_time = this->get_clock()->now();  // Use current time for real-time playback
 
-        // Publish images
-        publishImages(pb_frame, current_time);
+        // Publish images to ROS topics
+        publishImages(pb_frame, ros_time);
 
-        // Process pose through SLAM pipeline
-        processPose(pb_frame, current_time);
+        // Check if pose data is available in the recording
+        if (!pb_frame.has_pose()) {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                "Frame %lu has no pose data", current_frame_idx_);
+            current_frame_idx_++;
+            return;
+        }
 
-        // Advance to next frame
+        const auto& pb_pose = pb_frame.pose();
+
+        // Debug: Log pose for first few frames
+        if (current_frame_idx_ < 3) {
+            RCLCPP_INFO(this->get_logger(), "Frame %lu pose: t=[%.3f, %.3f, %.3f] q=[%.3f, %.3f, %.3f, %.3f]",
+                current_frame_idx_,
+                pb_pose.tx(), pb_pose.ty(), pb_pose.tz(),
+                pb_pose.qx(), pb_pose.qy(), pb_pose.qz(), pb_pose.qw());
+        }
+
+        // Extract pose from recording (world/map to camera transform)
+        Eigen::Vector3d translation(pb_pose.tx(), pb_pose.ty(), pb_pose.tz());
+        Eigen::Quaterniond quaternion(pb_pose.qw(), pb_pose.qx(), pb_pose.qy(), pb_pose.qz());
+        quaternion.normalize();
+        Sophus::SE3d T_world_camera(quaternion, translation);
+
+        // Convert left image for SLAM processing
+        cv::Mat left_image;
+        if (pb_frame.has_left_image()) {
+            auto left_msg = decompressImage(pb_frame.left_image(), ros_time, left_camera_frame_);
+            if (left_msg) {
+                cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(left_msg, sensor_msgs::image_encodings::BGR8);
+                left_image = cv_ptr->image;
+            }
+        }
+
+        // Broadcast TF transforms: map -> odom -> camera_base_link
+        // robot_state_publisher handles: camera_base_link -> ... -> left_camera_optical_frame
+        if (current_frame_idx_ < 3) {
+            RCLCPP_INFO(this->get_logger(), "Broadcasting TF: %s -> %s and %s -> %s",
+                world_frame_.c_str(), odom_frame_.c_str(),
+                odom_frame_.c_str(), robot_baselink_frame_.c_str());
+        }
+        broadcastTF(Sophus::SE3d(), world_frame_, odom_frame_, ros_time);
+        broadcastTF(T_world_camera, odom_frame_, robot_baselink_frame_, ros_time);
+
+        // Process frame through SLAM pipeline if we have an image
+        if (!left_image.empty()) {
+            // Create T_odom_leftCamera for SLAM (same as T_world_camera for playback)
+            slam_pipeline_->processSLAMFrame(T_world_camera, left_image, timestamp, T_world_camera);
+        }
+
+        // Log progress periodically
+        if (current_frame_idx_ % 100 == 0) {
+            RCLCPP_INFO(this->get_logger(), "Processing frame %lu/%d (%.1f%%)",
+                       current_frame_idx_, recording_->frames_size(),
+                       100.0 * current_frame_idx_ / recording_->frames_size());
+        }
+
+        // Move to next frame
         current_frame_idx_++;
+    }
+
+    void broadcastTF(const Sophus::SE3d& transform,
+                     const std::string& parent_frame,
+                     const std::string& child_frame,
+                     const rclcpp::Time& timestamp) {
+        if (!tf_broadcaster_) {
+            RCLCPP_ERROR(this->get_logger(), "TF broadcaster is null!");
+            return;
+        }
+
+        geometry_msgs::msg::TransformStamped tf_msg;
+        tf_msg.header.stamp = timestamp;
+        tf_msg.header.frame_id = parent_frame;
+        tf_msg.child_frame_id = child_frame;
+
+        // Translation
+        Eigen::Vector3d trans = transform.translation();
+        tf_msg.transform.translation.x = trans.x();
+        tf_msg.transform.translation.y = trans.y();
+        tf_msg.transform.translation.z = trans.z();
+
+        // Rotation
+        Eigen::Quaterniond quat = transform.unit_quaternion();
+        tf_msg.transform.rotation.x = quat.x();
+        tf_msg.transform.rotation.y = quat.y();
+        tf_msg.transform.rotation.z = quat.z();
+        tf_msg.transform.rotation.w = quat.w();
+
+        tf_broadcaster_->sendTransform(tf_msg);
     }
 
     void publishImages(const orbis_slam::Frame& pb_frame, const rclcpp::Time& timestamp) {
@@ -223,7 +319,7 @@ private:
 
         // Publish right image
         if (pb_frame.has_right_image()) {
-            auto right_msg = decompressImage(pb_frame.right_image(), timestamp, "right_camera_frame");
+            auto right_msg = decompressImage(pb_frame.right_image(), timestamp, left_camera_frame_);
             if (right_msg) {
                 right_image_pub_->publish(*right_msg);
             }
@@ -292,151 +388,6 @@ private:
 
         return cv_bridge::CvImage(header, encoding, image).toImageMsg();
     }
-
-    void processPose(const orbis_slam::Frame& pb_frame, const rclcpp::Time& current_time) {
-        if (!pb_frame.has_pose()) {
-            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                               "Frame %lu has no pose data", current_frame_idx_);
-            return;
-        }
-
-        const orbis_slam::CameraPose& pb_pose = pb_frame.pose();
-
-        // Convert protobuf pose to Sophus SE3
-        Eigen::Vector3d translation(pb_pose.tx(), pb_pose.ty(), pb_pose.tz());
-        Eigen::Quaterniond quaternion(pb_pose.qw(), pb_pose.qx(), pb_pose.qy(), pb_pose.qz());
-        quaternion.normalize();
-        Sophus::SE3d pose(quaternion, translation);
-
-        // Convert to tf2::Transform for broadcasting
-        tf2::Transform T_odom_leftCamera;
-        T_odom_leftCamera.setOrigin(tf2::Vector3(translation.x(), translation.y(), translation.z()));
-        T_odom_leftCamera.setRotation(tf2::Quaternion(quaternion.x(), quaternion.y(),
-                                                       quaternion.z(), quaternion.w()));
-
-        // Apply ZED to ROS camera frame conversion (same as in orbis_slam_pipeline.cpp)
-        tf2::Quaternion zed_to_ros_rotation;
-        zed_to_ros_rotation.setRPY(-M_PI / 2, 0, -M_PI / 2);
-        T_odom_leftCamera.setRotation(
-            tf2::Quaternion(quaternion.x(), quaternion.y(), quaternion.z(), quaternion.w())
-            * zed_to_ros_rotation
-        );
-
-        // Lookup transform from robot base to left camera
-        tf2::Transform T_robot_leftCamera;
-        try {
-            geometry_msgs::msg::TransformStamped T_robot_leftCamera_msg;
-            T_robot_leftCamera_msg = tf_buffer_->lookupTransform(
-                robot_baselink_frame_,
-                left_camera_frame_,
-                tf2::TimePointZero,
-                tf2::durationFromSec(1.0)
-            );
-            T_robot_leftCamera.setOrigin(tf2::Vector3(
-                T_robot_leftCamera_msg.transform.translation.x,
-                T_robot_leftCamera_msg.transform.translation.y,
-                T_robot_leftCamera_msg.transform.translation.z
-            ));
-            T_robot_leftCamera.setRotation(tf2::Quaternion(
-                T_robot_leftCamera_msg.transform.rotation.x,
-                T_robot_leftCamera_msg.transform.rotation.y,
-                T_robot_leftCamera_msg.transform.rotation.z,
-                T_robot_leftCamera_msg.transform.rotation.w
-            ));
-        } catch (const tf2::TransformException& ex) {
-            // If transform not available, use identity
-            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                               "Could not get transform %s -> %s: %s. Using identity.",
-                               robot_baselink_frame_.c_str(), left_camera_frame_.c_str(), ex.what());
-            T_robot_leftCamera.setIdentity();
-        }
-
-        // Compute T_odom_robot = T_odom_leftCamera * T_robot_leftCamera.inverse()
-        tf2::Transform T_odom_robot = T_odom_leftCamera * T_robot_leftCamera.inverse();
-        broadcastTF(T_odom_robot, odom_frame_, robot_baselink_frame_, current_time);
-
-        // Process through SLAM pipeline if enabled
-        if (!enable_slam_) {
-            // Just publish identity for map->odom
-            tf2::Transform T_map_odom;
-            T_map_odom.setIdentity();
-            broadcastTF(T_map_odom, world_frame_, odom_frame_, current_time);
-            return;
-        }
-
-        // Create frame for SLAM pipeline
-        Frame::Ptr curr_frame = Frame::create(curr_frame_id_++, pose, false, current_time.seconds());
-
-        // Process through keyframe selector
-        keyframe_selector_.processFrame(curr_frame);
-
-        if (!curr_frame->isKeyFrame()) {
-            return;
-        }
-
-        // Add to trajectory
-        trajectory_->pushBack(curr_frame);
-
-        // First keyframe - fix at origin
-        if (trajectory_->size() == 1) {
-            last_keyframe_ = curr_frame;
-            pose_optimizer_.addPoseVertex(curr_frame, true);
-            return;
-        }
-
-        // Add new keyframe to optimizer
-        pose_optimizer_.addPoseVertex(curr_frame, false);
-
-        // Add relative motion edge
-        Eigen::Matrix<double, 6, 6> information = Eigen::Matrix<double, 6, 6>::Identity();
-        information.block<3, 3>(0, 0) *= 100.0;  // Position information
-        information.block<3, 3>(3, 3) *= 100.0;  // Rotation information
-        pose_optimizer_.addRelativeMotionEdgeFromPoses(last_keyframe_, curr_frame, information);
-
-        // Request optimization if needed
-        if (pose_optimizer_.shouldOptimize(current_time.seconds())) {
-            pose_optimizer_.requestOptimization(current_time.seconds());
-        }
-
-        // Get optimized pose
-        curr_frame->pose = pose_optimizer_.getPose(curr_frame->id);
-
-        // Publish optimized pose as TF
-        tf2::Transform T_map_cam;
-        auto optimized_translation = curr_frame->pose.translation();
-        T_map_cam.setOrigin(tf2::Vector3(
-            optimized_translation.x(),
-            optimized_translation.y(),
-            optimized_translation.z()
-        ));
-        Eigen::Quaterniond q = curr_frame->pose.unit_quaternion();
-        T_map_cam.setRotation(tf2::Quaternion(q.x(), q.y(), q.z(), q.w()));
-
-        tf2::Transform T_map_odom = T_map_cam * T_odom_robot.inverse();
-        broadcastTF(T_map_odom, world_frame_, odom_frame_, current_time);
-
-        last_keyframe_ = curr_frame;
-    }
-
-    void broadcastTF(const tf2::Transform& transf,
-                    const std::string& parent_frame,
-                    const std::string& child_frame,
-                    const rclcpp::Time& timestamp)
-    {
-        geometry_msgs::msg::TransformStamped tf_msg;
-        tf_msg.header.stamp = timestamp;
-        tf_msg.header.frame_id = parent_frame;
-        tf_msg.child_frame_id = child_frame;
-        tf_msg.transform.translation.x = transf.getOrigin().x();
-        tf_msg.transform.translation.y = transf.getOrigin().y();
-        tf_msg.transform.translation.z = transf.getOrigin().z();
-        tf_msg.transform.rotation.x = transf.getRotation().x();
-        tf_msg.transform.rotation.y = transf.getRotation().y();
-        tf_msg.transform.rotation.z = transf.getRotation().z();
-        tf_msg.transform.rotation.w = transf.getRotation().w();
-
-        tf_broadcaster_->sendTransform(tf_msg);
-    }
 };
 
 } /* namespace Orbis */
@@ -444,14 +395,7 @@ private:
 
 int main(int argc, char ** argv) {
     rclcpp::init(argc, argv);
-
-    try {
-        rclcpp::spin(Orbis::ZED_Playback_Node::create());
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return EXIT_FAILURE;
-    }
-
+    rclcpp::spin(Orbis::ZED_Playback_Node::create());
     rclcpp::shutdown();
     return EXIT_SUCCESS;
 }
