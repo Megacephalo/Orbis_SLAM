@@ -49,7 +49,6 @@ class OrbisSLAMPipeline {
   public:
     /**
      * @brief Construct OrbisSLAMPipeline
-     * @param node ROS 2 node pointer for logging, parameters, and TF
      * @param use_camera If true, initialize ZED camera hardware (default: true)
      *                   If false, run in headless mode for playback
      */
