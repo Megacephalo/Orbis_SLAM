@@ -10,6 +10,8 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen)](https://github.com/Megacephalo/Orbis_SLAM)
 
+**English** | [繁體中文](README.zh-TW.md)
+
 </div>
 
 ---
