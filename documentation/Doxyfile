@@ -1,0 +1,97 @@
+# Doxygen configuration for Orbis SLAM.
+# Run from the repository root:
+#   doxygen documentation/Doxyfile
+
+PROJECT_NAME           = "Orbis SLAM"
+PROJECT_BRIEF          = "A modern visual-inertial stereo SLAM system for ROS 2"
+PROJECT_LOGO           = documentation/orbis_logo_cropped.jpeg
+OUTPUT_DIRECTORY       = documentation/doxygen
+
+INPUT                  = README.md \
+                         documentation/doxygen_mainpage.md \
+                         documentation/technical_documentation.md \
+                         documentation/protobuf_recording_guide.md \
+                         documentation/LOOP_CLOSURE_IMPLEMENTATION.md \
+                         documentation/LOOP_CLOSURE_SUMMARY.md \
+                         documentation/TESTING_LOOP_CLOSURE.md \
+                         include \
+                         src \
+                         app \
+                         proto \
+                         launch
+
+USE_MDFILE_AS_MAINPAGE = documentation/doxygen_mainpage.md
+RECURSIVE              = YES
+EXCLUDE                = documentation/doxygen \
+                         third_party \
+                         build \
+                         install \
+                         log \
+                         .git \
+                         .claude \
+                         .codex
+
+EXCLUDE_PATTERNS      = */*.pb.h \
+                        */*.pb.cc
+
+FILE_PATTERNS          = *.h \
+                         *.hpp \
+                         *.hh \
+                         *.c \
+                         *.cc \
+                         *.cpp \
+                         *.cxx \
+                         *.py \
+                         *.proto \
+                         *.md
+
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+MARKDOWN_SUPPORT       = YES
+AUTOLINK_SUPPORT       = YES
+
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+HTML_COLORSTYLE_HUE    = 214
+HTML_COLORSTYLE_SAT    = 90
+HTML_COLORSTYLE_GAMMA  = 80
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+
+GENERATE_LATEX         = NO
+GENERATE_XML           = NO
+GENERATE_MAN           = NO
+GENERATE_RTF           = NO
+
+OPTIMIZE_OUTPUT_FOR_C  = NO
+OPTIMIZE_OUTPUT_JAVA   = NO
+BUILTIN_STL_SUPPORT    = YES
+CPP_CLI_SUPPORT        = NO
+SIP_SUPPORT            = NO
+IDL_PROPERTY_SUPPORT   = NO
+
+QUIET                  = NO
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = NO
+WARN_AS_ERROR          = NO
+
+HAVE_DOT               = YES
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+CLASS_DIAGRAMS         = YES
+UML_LOOK               = NO
+
+SEARCHENGINE           = YES
+SERVER_BASED_SEARCH    = NO

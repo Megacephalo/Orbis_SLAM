@@ -24,6 +24,7 @@
 - [Usage](#usage)
 - [Configuration](#configuration)
 - [Architecture](#architecture)
+- [Developer Documentation](#developer-documentation)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
@@ -492,6 +493,29 @@ For optimal performance:
 - Defines core data types (Frame, Trajectory, etc.)
 - Provides thread-safe, efficient pose storage and access (i.e., the trajectory)
 
+## Developer Documentation
+
+The code reference is generated with Doxygen under `documentation/doxygen/html`.
+
+```bash
+# From the repository root
+doxygen documentation/Doxyfile
+```
+
+Browse the generated documentation by opening:
+
+```text
+documentation/doxygen/html/index.html
+```
+
+If you prefer a local HTTP server:
+
+```bash
+python3 -m http.server 8000 --directory documentation/doxygen/html
+```
+
+Then visit `http://localhost:8000`.
+
 ## Roadmap
 
 ### Current Features (v0.1.0)
@@ -574,4 +598,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 [Report Bug](https://github.com/Megacephalo/Orbis_SLAM/issues) · [Request Feature](https://github.com/Megacephalo/Orbis_SLAM/issues) · [Contribute](https://github.com/Megacephalo/Orbis_SLAM/pulls)
 
 </div>
-
